@@ -1,0 +1,53 @@
+[project]
+name = "rage-multiturn"
+version = "0.1.0"
+description = "RAGE — Multi-turn prompt injection defense with AUC degradation metric"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=1.26",
+    "scikit-learn>=1.4",
+    "matplotlib>=3.8",
+    "seaborn>=0.13",
+]
+
+[project.optional-dependencies]
+transformers = [
+    "sentence-transformers>=3.0",
+]
+openai = [
+    "openai>=1.30",
+]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.4",
+    "pytest-cov>=5.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.4",
+    "pytest-cov>=5.0",
+]
+
+[project.scripts]
+rage-demo  = "rage_core.demo.cli:main"
+rage-bench = "rage_core.metrics.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["rage_core"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 130
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
