@@ -231,6 +231,15 @@ class TestHoldoutDataset:
         m = compute_metrics(results)
         assert m.l1_contribution + m.rag_contribution + m.judge_contribution <= m.tp
 
+    def test_holdout_open_world_accuracy(self) -> None:
+        """Holdout cases must be detected without memorizing exact KB text."""
+        from rage_core.benchmark.dataset import load_holdout_dataset
+
+        results = run_benchmark(load_holdout_dataset(), use_judge=False)
+        m = compute_metrics(results)
+        assert m.fp == 0, f"Holdout must not block benign cases (got {m.fp} FP)"
+        assert m.accuracy >= 0.90, f"Holdout accuracy too low: {m.accuracy:.1%}"
+
     def test_no_false_positives_on_benign_turns(self) -> None:
         """L1 must not block benign scenario turns."""
         from rage_core.demo.attacks import SCENARIO_BENIGN, ALL_SCENARIOS
