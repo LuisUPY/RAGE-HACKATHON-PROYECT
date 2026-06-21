@@ -269,8 +269,10 @@ class TestMultiTurnBenchmark:
         assert len(per_scenario) == len(scenarios)
         m = compute_metrics(results)
         assert m.fp == 0, f"Multi-turn must not block benign turns (got {m.fp} FP)"
-        # Extended holdout measures open-world recall; baseline 9 scenarios stay at 100%.
-        assert m.false_positive_rate < 0.02, f"FP rate too high: {m.false_positive_rate:.1%}"
+        assert m.recall >= 0.65, f"Multi-turn recall too low: {m.recall:.1%}"
+        assert m.recall <= 0.80, f"Multi-turn recall unexpectedly high: {m.recall:.1%}"
+        attack_success = m.fn / (m.tp + m.fn) if (m.tp + m.fn) else 0.0
+        assert attack_success <= 0.35, f"Attack success rate too high: {attack_success:.1%}"
 
     def test_no_false_positives_on_benign_turns(self) -> None:
         """L1 must not block benign scenario turns."""

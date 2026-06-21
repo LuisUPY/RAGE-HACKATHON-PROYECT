@@ -23,7 +23,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from rage_core.benchmark.dataset import BenchmarkCase, BenchmarkScenario
-from rage_core.layers.access_policy import RAG_ATTACK_THRESHOLD, is_attack_verdict, is_rag_confirmed_attack
+from rage_core.layers.access_policy import (
+    RAG_ATTACK_THRESHOLD,
+    is_attack_verdict,
+    is_multiturn_attack_verdict,
+    is_rag_confirmed_attack,
+)
 from rage_core.layers.layer4_decision import DefensePipeline
 from rage_core.models import ConversationState, TurnSignal
 
@@ -137,9 +142,24 @@ def run_multi_turn_benchmark(
     results: list[CaseResult] = []
     for scenario in scenarios:
         state = ConversationState()
+        prior_l2_peak = 0.0
+        prior_drift_peak = 0.0
         for idx, turn in enumerate(scenario.turns):
             signal = pipeline.evaluate(turn.text, state)
-            rage_verdict = _decide(signal, use_judge)
+            rage_verdict = is_multiturn_attack_verdict(
+                signal,
+                turn_index=idx,
+                prior_l2_peak=prior_l2_peak,
+                prior_drift_peak=prior_drift_peak,
+                session_risk=state.session_risk_score,
+                use_judge=use_judge,
+            )
+            prior_l2_peak = max(prior_l2_peak, signal.layer2.score)
+            prior_drift_peak = max(
+                prior_drift_peak,
+                signal.layer3.drift,
+                signal.layer3.cumulative_drift,
+            )
             desc = turn.description or f"Turn {idx} of {scenario.id}"
             if scenario.research_source:
                 desc = f"{desc} [{scenario.research_source}]"
