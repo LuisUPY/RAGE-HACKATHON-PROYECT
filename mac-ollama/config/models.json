@@ -1,0 +1,14 @@
+{
+  "profiles": {
+    "m1_8gb": {
+      "unified_ram_gb": 8,
+      "chat_model": "qwen2.5:3b-instruct",
+      "judge_model": "qwen2.5:3b-instruct",
+      "fallback_model": "phi3:mini",
+      "notes": "Mac M1 8GB unified RAM — use 3B models; close heavy apps if swap occurs"
+    }
+  },
+  "pull_order": [
+    "qwen2.5:3b-instruct"
+  ]
+}

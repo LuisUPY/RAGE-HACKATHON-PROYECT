@@ -150,3 +150,7 @@ Ver [Manuales/training-center-manual.pdf](../Manuales/training-center-manual.pdf
 - **No uses modo interactivo curses** en Windows para red-team; usa los scripts headless.
 - **Embeddings**: TF-IDF offline por defecto (sin descargas grandes). Opcional: `uv sync --extra transformers`.
 - **Sin API key de OpenAI**: todo funciona con Ollama local ($0).
+
+## Mac Apple Silicon
+
+Para Mac M1/M2/M3 con 8 GB RAM, ver [mac-ollama/README.md](../mac-ollama/README.md).
