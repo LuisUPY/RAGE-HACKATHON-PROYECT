@@ -1,86 +1,86 @@
-# RAGE: Robust Agentic Security Gateway for Text-to-SQL — Defensa Contra Ataques Crescendo Multi-Turno
+# RAGE: Robust Agentic Security Gateway for Text-to-SQL — Defending Against Multi-Turn Crescendo Attacks
 
-**Autores:** Equipo de Investigación RAGE  
-**Evento:** Global South AI Safety Hackathon, junio de 2026  
-**Repositorio:** `rage-multiturn` — Python 3.12, licencia MIT  
-**Ancla arXiv:** Russinovich et al., 2404.01833 [cs.CR]
-
----
-
-## Resumen
-
-Las interfaces Text-to-SQL que conectan modelos de lenguaje a bases de datos relacionales exponen una superficie de ataque donde el adversario puede migrar gradualmente una sesión legítima hacia consultas destructivas sin activar filtros stateless. Russinovich et al. demostraron que *Crescendo* alcanza tasas de éxito del 98–100% en modelos alineados mediante prompts exclusivamente benignos distribuidos en N turnos. Presentamos **RAGE** (*Robust Agentic Security Gateway for Text-to-SQL*), un framework de cuatro capas con filtro semántico stateful, motor de decisión EWMA con trinquete de advertencias y gateway SQL endurecido. Integramos el **Training-Center**, entorno interactivo de simulación y calibración de hiperparámetros. Introducimos las métricas **AUC-D** (Área Bajo la Curva de Degradación) y **TRI** (Temporal Resistance Index). Validamos el sistema con **108 pruebas automatizadas** (100% aprobadas) y el escenario `SCENARIO_CRESCENDO`, donde RAGE bloquea los turnos T4 y T5 mediante acción independiente de capas 3, 4 y gateway.
+**Authors:** RAGE Research Team  
+**Venue:** Global South AI Safety Hackathon, June 2026  
+**Repository:** `rage-multiturn` — Python 3.12, MIT License  
+**arXiv anchor:** Russinovich et al., 2404.01833 [cs.CR]
 
 ---
 
-## 1. Introducción y Marco Teórico
+## Abstract
 
-### 1.1 La Superficie de Ataque en Text-to-SQL
-
-Las organizaciones despliegan cada vez más agentes conversacionales capaces de traducir lenguaje natural a SQL sobre datos operacionales [2, 3]. A diferencia de formularios web o APIs REST con esquemas de validación rígidos, estos sistemas aceptan entradas de longitud arbitraria cuya intención semántica es difícil de acotar con firmas estáticas. Un usuario que mantiene una conversación multi-turno dispone de una libertad expresiva incompatible con el principio de mínimo privilegio en seguridad de bases de datos.
-
-Las defensas previas evalúan cada turno de forma aislada: escanean el prompt actual en busca de patrones conocidos (`DROP TABLE`, `IGNORE PREVIOUS INSTRUCTIONS`) y lo rechazan si alguna firma coincide. Este modelo *stateless* es un corolario directo de los benchmarks de alineación mono-turno que dominan la investigación actual. Russinovich et al. lo formulan explícitamente: *"all current benchmarks focus solely on single-turn jailbreaks"* [1, §1], y demuestran que Crescendo evade estas medidas con facilidad.
-
-### 1.2 Teoría del Cambio: De Filtros Apátridas a Defensas Basadas en Estado
-
-La contribución conceptual central de RAGE es la **Teoría del Cambio** hacia defensas *session-aware*. El adversario persistente no busca activar una única alarma; construye *momentum conversacional* que coloniza el contexto del modelo turno a turno. Neutralizar este adversario exige tres capacidades ausentes en filtros stateless:
-
-1. **Anclaje a línea base:** medir desviación acumulada respecto al turno T0, no solo respecto al turno inmediatamente anterior.
-2. **Memoria de riesgo de sesión:** acumular señales moderadas que, individualmente, no superan umbrales per-turno.
-3. **Contención determinista de acciones:** validar la consulta SQL resultante independientemente de lo que las capas semánticas permitan.
-
-Formalmente, sea $\mathcal{S} = \langle q_0, q_1, \ldots, q_N \rangle$ una secuencia de prompts y $\mathbf{e}_i \in \mathbb{R}^{2048}$ el embedding L2-normalizado del turno $i$. Definimos la deriva turno-a-turno $\delta_i = \max(0, 1 - \mathbf{e}_i \cdot \mathbf{e}_{i-1})$ y la deriva acumulada $\Delta_i = \max(0, 1 - \mathbf{e}_i \cdot \mathbf{e}_0)$. Un filtro stateless con umbral $\tau$ bloquea el turno $i$ iff $\delta_i > \tau$. En un ataque Crescendo con tamaño de paso $\epsilon \ll \tau$, todos los turnos satisfacen $\delta_i = \epsilon < \tau$, pero $\Delta_N = \sum_{i=1}^{N}\epsilon \approx N\epsilon$ puede superar ampliamente $\tau$ para $N$ suficientemente grande.
-
-**Proposición 1 (Ceguera del Filtro Apátrida).** Un filtro que evalúa exclusivamente $\delta_i$ es ciego ante trayectorias de escalada gradual cuyo vector semántico converge monótonamente lejos de $\mathbf{e}_0$ sin saltos abruptos entre turnos consecutivos. La defensa requiere computar $\Delta_i$ y mantener un score de riesgo de sesión $R_t$ con memoria exponencial.
+Text-to-SQL interfaces that connect language models to relational databases expose an attack surface where an adversary can gradually migrate a legitimate session toward destructive queries without triggering stateless filters. Russinovich et al. demonstrated that *Crescendo* achieves 98–100% success rates on aligned models using exclusively benign prompts distributed across N turns. We present **RAGE** (*Robust Agentic Security Gateway for Text-to-SQL*), a four-layer framework with a stateful semantic filter, EWMA decision engine with a consecutive-warn ratchet, and a hardened SQL gateway. We integrate the **Training-Center**, an interactive environment for simulation and hyperparameter calibration. We introduce the **AUC-D** (Area Under the Curve of Degradation) and **TRI** (Temporal Resistance Index) metrics. We validate the system with **108 automated tests** (100% passing) and the `SCENARIO_CRESCENDO` scenario, where RAGE blocks turns T4 and T5 through independent action across layers 3, 4, and the gateway.
 
 ---
 
-## 2. Trabajos Relacionados y Análisis de la Amenaza Crescendo
+## 1. Introduction and Theoretical Framework
 
-### 2.1 Literatura Previa
+### 1.1 The Text-to-SQL Attack Surface
 
-**Crescendo (Microsoft, 2024).** Russinovich, Salem y Eldan [1] introducen un jailbreak multi-turno de caja negra que usa exclusivamente prompts benignos y legibles. Su mecanismo se fundamenta en el principio psicológico *foot-in-the-door*: acordar una petición pequeña incrementa sistemáticamente la compliance con demandas mayores. En LLaMA-2 70b, la secuencia completa `A → B → C` alcanza 99,9% de éxito, mientras que `B` aislado logra 36,2% y `C` solo 17,3% — confirmando que *es la trayectoria, no el turno individual, la que constituye el ataque*.
+Organizations increasingly deploy conversational agents capable of translating natural language into SQL over operational data [2, 3]. Unlike web forms or REST APIs with rigid validation schemas, these systems accept inputs of arbitrary length whose semantic intent is difficult to bound with static signatures. A user who maintains a multi-turn conversation possesses expressive freedom that is fundamentally incompatible with the least-privilege principle in database security.
 
-**Fallas de alineación y ataques universales.** Zou et al. [5] demuestran ataques adversarios transferibles sobre modelos alineados; Pérez y Ribeiro [6] documentan técnicas de *Ignore Previous Prompt*. Estos trabajos operan predominantemente en el régimen mono-turno.
+Prior defences evaluate each turn in isolation: they scan the current prompt for known patterns (`DROP TABLE`, `IGNORE PREVIOUS INSTRUCTIONS`) and reject it if any signature matches. This *stateless* model is a direct corollary of the single-turn alignment benchmarks that dominate current research. Russinovich et al. state explicitly: *"all current benchmarks focus solely on single-turn jailbreaks"* [1, §1], and demonstrate that Crescendo evades these measures with ease.
 
-**OWASP LLM Top 10.** La taxonomía OWASP [4] identifica vectores directamente relevantes: **LLM01** (Prompt Injection), **LLM06** (Excessive Agency — agencia excesiva del agente sobre herramientas), y **LLM08** (confianza indebida en entradas no confiables, incluidos resúmenes de intención generados por el propio atacante). RAGE mapea explícitamente cada capa a estos identificadores.
+### 1.2 Theory of Change: From Stateless Filters to Session-Based Defences
 
-**Crescendomation.** Russinovich et al. reportan que la variante automatizada supera PAIR y MSJ entre 29–61% en GPT-4 [1, Tabla 4], elevando la urgencia de defensas session-aware desplegables.
+The central conceptual contribution of RAGE is the **Theory of Change** toward *session-aware* defences. A persistent adversary does not seek to trigger a single alarm; they build *conversational momentum* that colonises the model's context turn by turn. Neutralising this adversary requires three capabilities absent from stateless filters:
 
-### 2.2 Tres Fases del Ataque Adaptadas a Text-to-SQL
+1. **Baseline anchoring:** measure accumulated deviation from turn T0, not only from the immediately preceding turn.
+2. **Session risk memory:** accumulate moderate signals that, individually, do not exceed per-turn thresholds.
+3. **Deterministic action containment:** validate the resulting SQL query regardless of what the semantic layers permit.
 
-| Fase | Turnos | Objetivo del adversario | Señal stateless |
-|------|--------|-------------------------|-----------------|
-| **Context Seeding** | T0–T1 | Establecer competencia técnica; consultas legítimas sobre `sales` | Ninguna |
-| **Scope Expansion** | T2–T3 | Ampliar tablas (`products`), JOINs, marco de "auditoría" | $\delta_i$ bajo; $\Delta_i$ crece lentamente |
-| **Payload Injection** | T4+ | `UNION ALL SELECT … FROM system_config`; exfiltración | Payload enmascarado como continuación natural |
+Formally, let $\mathcal{S} = \langle q_0, q_1, \ldots, q_N \rangle$ be a sequence of prompts and $\mathbf{e}_i \in \mathbb{R}^{2048}$ the L2-normalised embedding of turn $i$. We define turn-to-turn drift $\delta_i = \max(0, 1 - \mathbf{e}_i \cdot \mathbf{e}_{i-1})$ and cumulative drift $\Delta_i = \max(0, 1 - \mathbf{e}_i \cdot \mathbf{e}_0)$. A stateless filter with threshold $\tau$ blocks turn $i$ iff $\delta_i > \tau$. In a Crescendo attack with step size $\epsilon \ll \tau$, all turns satisfy $\delta_i = \epsilon < \tau$, but $\Delta_N = \sum_{i=1}^{N}\epsilon \approx N\epsilon$ may far exceed $\tau$ for sufficiently large $N$.
 
-El bypass confirmado pre-corrección en el gateway — el patrón `\bUNION\s+SELECT\b` no coincidía con `UNION ALL SELECT` — permitía que una rama UNION accediera a tablas no autorizadas mientras el extractor `_FROM_TABLE_RE` validaba solo la primera cláusula `FROM`.
+**Proposition 1 (Stateless Filter Blindness).** A filter that evaluates exclusively $\delta_i$ is blind to gradual escalation trajectories whose semantic vector monotonically converges away from $\mathbf{e}_0$ without abrupt jumps between consecutive turns. The defence requires computing $\Delta_i$ and maintaining a session risk score $R_t$ with exponential memory.
 
 ---
 
-## 3. Metodología Detallada y Arquitectura de Software
+## 2. Related Work and Crescendo Threat Analysis
 
-RAGE implementa una cascada de cuatro capas seguida de un gateway de acciones y un evaluador de métricas temporales:
+### 2.1 Prior Literature
+
+**Crescendo (Microsoft, 2024).** Russinovich, Salem, and Eldan [1] introduce a black-box, multi-turn jailbreak that uses exclusively benign, human-readable prompts. Its mechanism is grounded in the *foot-in-the-door* psychological principle: agreeing to a small initial request systematically increases compliance with subsequent, larger demands. On LLaMA-2 70b, the full sequence `A → B → C` achieves 99.9% success, while `B` alone achieves 36.2% and `C` only 17.3% — confirming that *it is the trajectory, not the individual turn, that constitutes the attack*.
+
+**Alignment failures and universal attacks.** Zou et al. [5] demonstrate transferable adversarial attacks on aligned models; Pérez and Ribeiro [6] document *Ignore Previous Prompt* techniques. These works operate predominantly in the single-turn regime.
+
+**OWASP LLM Top 10.** The OWASP taxonomy [4] identifies directly relevant vectors: **LLM01** (Prompt Injection), **LLM06** (Excessive Agency — excessive agent control over tools), and **LLM08** (undue trust in untrusted inputs, including intent summaries generated by the attacker). RAGE explicitly maps each layer to these identifiers.
+
+**Crescendomation.** Russinovich et al. report that the automated variant outperforms PAIR and MSJ by 29–61% on GPT-4 [1, Table 4], raising the urgency of deployable session-aware defences.
+
+### 2.2 Three Attack Phases Adapted to Text-to-SQL
+
+| Phase | Turns | Adversary objective | Stateless signal |
+|-------|-------|---------------------|------------------|
+| **Context Seeding** | T0–T1 | Establish technical competence; legitimate queries on `sales` | None |
+| **Scope Expansion** | T2–T3 | Expand tables (`products`), JOINs, "audit" framing | Low $\delta_i$; $\Delta_i$ grows slowly |
+| **Payload Injection** | T4+ | `UNION ALL SELECT … FROM system_config`; exfiltration | Payload masked as natural continuation |
+
+The confirmed pre-fix gateway bypass — the pattern `\bUNION\s+SELECT\b` did not match `UNION ALL SELECT` — allowed a UNION branch to access unauthorised tables while the `_FROM_TABLE_RE` extractor validated only the first `FROM` clause.
+
+---
+
+## 3. Detailed Methodology and Software Architecture
+
+RAGE implements a four-layer cascade followed by an action gateway and a temporal metrics evaluator:
 
 ```
-Turno del usuario → [L1: Regex] → [L2: RAG KB] → [L3: Filtro Semántico] → [L4: Motor de Decisión]
-                                                                                      ↓
-                                                              [Gateway SQL] → [Agente SQLite]
-                                                                                      ↓
-                                                              [Evaluador AUC-D / TRI]
+User turn → [L1: Regex] → [L2: RAG KB] → [L3: Semantic Filter] → [L4: Decision Engine]
+                                                                          ↓
+                                                          [SQL Gateway] → [SQLite Agent]
+                                                                          ↓
+                                                          [AUC-D / TRI Evaluator]
 ```
 
-### 3.1 Capa 1 — Pre-Filtro Determinístico (`layer1_rules.py`)
+### 3.1 Layer 1 — Deterministic Pre-Filter (`layer1_rules.py`)
 
-La Capa 1 aplica **14 reglas regex compiladas** (L1-001 a L1-014) con salida temprana en la primera coincidencia. Coste: $O(1)$ por turno, sin ML ni llamadas API.
+Layer 1 applies **14 compiled regex rules** (L1-001 through L1-014) with early exit on the first match. Cost: $O(1)$ per turn, no ML, no API calls.
 
 ```python
 _RAW_RULES: list[tuple[str, str, str]] = [
     ("L1-001", "Explicit ignore-previous-instructions", r"ignore\s+(all\s+)?(previous|prior|above)\s+instructions?"),
     ("L1-006", "SQL DROP TABLE attempt", r"\bDROP\s+TABLE\b"),
     ("L1-007", "SQL GRANT PRIVILEGES", r"\bGRANT\s+ALL\s+PRIVILEGES\b"),
-    # ... L1-002 a L1-014: DAN, shell exec, exfiltración, prompt leakage ...
+    # ... L1-002 through L1-014: DAN, shell exec, exfiltration, prompt leakage ...
 ]
 
 class DeterministicPreFilter:
@@ -92,11 +92,11 @@ class DeterministicPreFilter:
         return Layer1Signal(matched=False)
 ```
 
-**Contribución al score:** +70 puntos ante coincidencia determinística. **Limitación reconocida:** invisible ante atacantes Crescendo que evitan firmas conocidas; diseñada como *trip-wire* rápido, no como defensa primaria multi-turno.
+**Score contribution:** +70 points on deterministic match. **Acknowledged limitation:** invisible to Crescendo attackers who avoid known signatures; designed as a fast *trip-wire*, not the primary multi-turn defence.
 
-### 3.2 Capa 2 — Base de Conocimiento RAG (`layer2_rag.py`)
+### 3.2 Layer 2 — RAG Threat Knowledge Base (`layer2_rag.py`)
 
-La Capa 2 embede el texto del turno y calcula similitud coseno contra una base vectorial local de **34 ejemplos de ataque OWASP** (familias LLM01, inyección indirecta, payload splitting, escalada gradual, etc.) almacenados en `rage_core/kb/threats.json`.
+Layer 2 embeds the turn text and computes cosine similarity against a local vector store of **34 OWASP attack examples** (LLM01 families, indirect injection, payload splitting, gradual escalation, etc.) stored in `rage_core/kb/threats.json`.
 
 ```python
 class ThreatKBRetriever:
@@ -111,15 +111,15 @@ class ThreatKBRetriever:
         return Layer2Signal(score=top_sim, top_match_id=threat["id"], owasp_id=threat["owasp_id"], ...)
 ```
 
-Prioridad de embedder: `sentence-transformers` → OpenAI → **TF-IDF offline (default)**. La función `add_threat()` permite hot-update en runtime sin reentrenamiento. **Contribución al score:** hasta +30 puntos ($\min(L2_{\text{score}}, 1) \times 30$).
+Embedder priority: `sentence-transformers` → OpenAI → **TF-IDF offline (default)**. The `add_threat()` function enables runtime hot-update without retraining. **Score contribution:** up to +30 points ($\min(L2_{\text{score}}, 1) \times 30$).
 
-### 3.3 Capa 3 — Filtro Semántico Stateful (`layer3_semantic.py`)
+### 3.3 Layer 3 — Stateful Semantic Filter (`layer3_semantic.py`)
 
-**Núcleo de la defensa anti-Crescendo.** Utiliza `HashingVectorizer` con `n_features=2048`, `alternate_sign=False`, `norm="l2"`, garantizando compatibilidad dimensional entre turnos sin refitting:
+**Core of the anti-Crescendo defence.** Uses `HashingVectorizer` with `n_features=2048`, `alternate_sign=False`, `norm="l2"`, ensuring dimensional compatibility across turns without refitting:
 
 $$\cos(\mathbf{u}, \mathbf{v}) = \mathbf{u} \cdot \mathbf{v}, \quad \|\mathbf{u}\| = \|\mathbf{v}\| = 1$$
 
-El bloque central con `np.dot()` implementa ambas métricas de deriva:
+The central block with `np.dot()` implements both drift metrics:
 
 ```python
 # 2. Turn-to-turn drift
@@ -138,17 +138,17 @@ if len(state.turn_embeddings) >= 1:
 suspicious = drift > self._threshold or cumulative_drift > self._threshold
 ```
 
-Con umbral default $\tau = 0.80$ (calibrado para `HashingVectorizer`; $\approx 0.35$ con `sentence-transformers`). Cumplimiento **OWASP LLM08:** `_sanitize()` elimina caracteres de control (`\x00`–`\x1f`, `\x7f`) y trunca resúmenes a 300 caracteres antes de almacenamiento o inclusión en prompts del juez LLM opcional (`gpt-4o-mini`).
+Default threshold $\tau = 0.80$ (calibrated for `HashingVectorizer`; $\approx 0.35$ with `sentence-transformers`). **OWASP LLM08 compliance:** `_sanitize()` strips control characters (`\x00`–`\x1f`, `\x7f`) and truncates summaries to 300 characters before storage or inclusion in the optional LLM judge prompt (`gpt-4o-mini`).
 
-### 3.4 Capa 4 — Motor de Decisión Dinámico (`layer4_decision.py`)
+### 3.4 Layer 4 — Dynamic Decision Engine (`layer4_decision.py`)
 
-#### Fusión de scores per-turno
+#### Per-turn score fusion
 
 $$s_i = 70 \cdot \mathbf{1}[\text{L1}] + 30 \cdot \min(L2, 1) + 20 \cdot \min(\max(\delta_i, \Delta_i), 1) + 5 \cdot \mathbf{1}[\text{turn} \geq 2 \land \Delta_i > 0.75] + 10 \cdot \mathbf{1}[\text{LLM flagged}]$$
 
-Bandas: $\theta_{\text{warn}} = 30$, $\theta_{\text{block}} = 65$.
+Bands: $\theta_{\text{warn}} = 30$, $\theta_{\text{block}} = 65$.
 
-#### EWMA de riesgo de sesión
+#### Session-risk EWMA
 
 $$R_t = (1 - \alpha) \cdot R_{t-1} + \alpha \cdot \frac{s_t}{100}, \quad \alpha = 0.50, \quad R_0 = 0$$
 
@@ -164,23 +164,23 @@ state.session_risk_score = (
 )
 ```
 
-**Tabla de escalada de riesgo** (turnos moderados con $s_i = 20$):
+**Risk escalation table** (moderate turns with $s_i = 20$):
 
-| Turno | $s_i$ | $s_i/100$ | $R_t$ ($\alpha=0.5$) | Elevación |
-|-------|-------|-----------|----------------------|-----------|
+| Turn | $s_i$ | $s_i/100$ | $R_t$ ($\alpha=0.5$) | Elevation |
+|------|-------|-----------|----------------------|-----------|
 | 0 | 20 | 0.20 | 0.100 | — |
 | 1 | 22 | 0.22 | 0.160 | — |
 | 2 | 24 | 0.24 | 0.200 | WARN ($R_t > 0.18$) |
 | 3 | 26 | 0.26 | 0.230 | WARN |
 | 4 | 28 | 0.28 | 0.255 | BLOCK (ratchet $K=2$) |
 
-#### Trinquete de advertencias consecutivas
+#### Consecutive-warn ratchet
 
-Tras $K_{\text{ratchet}} = 2$ turnos consecutivos en banda WARN, la banda se eleva incondicionalmente a BLOCK. El contador `consecutive_warns` se reinicia en ALLOW o BLOCK.
+After $K_{\text{ratchet}} = 2$ consecutive WARN-band turns, the band is unconditionally elevated to BLOCK. The `consecutive_warns` counter resets on ALLOW or BLOCK.
 
-### 3.5 Gateway de Seguridad SQL (`gateway.py`)
+### 3.5 SQL Security Gateway (`gateway.py`)
 
-Última línea de defensa determinista antes de ejecutar `query_db()`. Corrección del bypass `UNION ALL`:
+Deterministic last line of defence before executing `query_db()`. Fix for the `UNION ALL` bypass:
 
 ```python
 ("UNION-based exfiltration", re.compile(r"\bUNION\b", re.IGNORECASE)),
@@ -193,26 +193,26 @@ for table in tables_found:
         return False, f"Table '{table}' is not in the allowlist {_ALLOWED_TABLES}"
 ```
 
-Tablas permitidas: `{sales, products, regions}`. Blocklist ampliada con 21 patrones: `ALTER`, `CREATE`, `EXEC`, `SLEEP/BENCHMARK`, `CHAR()`, literales hex, `information_schema`, `sqlite_master`, `LOAD_FILE`, etc.
+Allowed tables: `{sales, products, regions}`. Expanded blocklist with 21 patterns: `ALTER`, `CREATE`, `EXEC`, `SLEEP/BENCHMARK`, `CHAR()`, hex literals, `information_schema`, `sqlite_master`, `LOAD_FILE`, etc.
 
 ---
 
-## 4. Entorno de Simulación y Aprendizaje: Infraestructura Training-Center
+## 4. Simulation and Learning Environment: Training-Center Infrastructure
 
-El módulo `rage_core/training/` y el directorio `Training-Center/` constituyen la **contribución de infraestructura interactiva** desarrollada durante el hackatón de junio de 2026. Su propósito es triple: (i) simular escenarios de ataque/defensa reproducibles, (ii) calibrar hiperparámetros (`ewma_alpha`, `ratchet_turns`, umbrales de sesión), y (iii) generar candidatos para hot-update del KB ante nuevas variantes de Crescendomation.
+The `rage_core/training/` module and the `Training-Center/` directory constitute the **interactive infrastructure contribution** developed during the June 2026 hackathon. Its purpose is threefold: (i) simulate reproducible attack/defence scenarios, (ii) calibrate hyperparameters (`ewma_alpha`, `ratchet_turns`, session thresholds), and (iii) generate candidates for KB hot-update against new Crescendomation variants.
 
-### 4.1 Arquitectura
+### 4.1 Architecture
 
-| Componente | Archivo | Función |
-|------------|---------|---------|
-| Orquestador | `orchestrator.py` | Ejecuta un escenario turno a turno con/sin RAGE |
-| Escenarios | `scenarios.py` | Puente entre `demo/attacks.py` y packs JSON custom |
-| Campaña | `campaign.py` | Agrega ASR defended vs baseline |
-| Reporter | `reporter.py` | Deriva insights y candidatos KB |
-| Apply | `apply.py` | Aplica parches a `threats.json` |
+| Component | File | Function |
+|-----------|------|----------|
+| Orchestrator | `orchestrator.py` | Runs a scenario turn-by-turn with/without RAGE |
+| Scenarios | `scenarios.py` | Bridge between `demo/attacks.py` and custom JSON packs |
+| Campaign | `campaign.py` | Aggregates defended vs baseline ASR |
+| Reporter | `reporter.py` | Derives insights and KB candidates |
+| Apply | `apply.py` | Applies patches to `threats.json` |
 | CLI | `cli.py` | `uv run rage-training` |
 
-El orquestador materializa cada turno como `TurnRecord` con trazabilidad completa:
+The orchestrator materialises each turn as a `TurnRecord` with full traceability:
 
 ```python
 class ScenarioOrchestrator:
@@ -228,7 +228,7 @@ class ScenarioOrchestrator:
             # ... gateway check, ground-truth scoring, vulnerability tagging ...
 ```
 
-La campaña ejecuta cada escenario **con RAGE y sin RAGE** (baseline), calculando reducción de ASR:
+The campaign runs each scenario **with RAGE and without RAGE** (baseline), computing ASR reduction:
 
 ```python
 class TrainingCampaign:
@@ -239,38 +239,38 @@ class TrainingCampaign:
                 runs.append(self._orchestrator.run(pack, defended=False, mode="baseline_no_rage"))
 ```
 
-Los resultados se exportan a `Training-Center/results/crescendo_YYYYMMDD_HHMMSS.json`. El módulo `build_actionable_insights()` detecta bypasses de bajo score, bypasses en banda WARN, y genera entradas KB candidatas (`tc-{scenario_id}-t{turn}`) para aplicación via `uv run rage-training-apply --apply-kb`.
+Results are exported to `Training-Center/results/crescendo_YYYYMMDD_HHMMSS.json`. The `build_actionable_insights()` module detects low-score bypasses, WARN-band bypasses, and generates KB candidate entries (`tc-{scenario_id}-t{turn}`) for application via `uv run rage-training-apply --apply-kb`.
 
-### 4.2 Calibración de Hiperparámetros
+### 4.2 Hyperparameter Calibration
 
-El flujo de calibración recomendado:
+Recommended calibration workflow:
 
-1. `uv run rage-training --scenarios crescendo_escalation` — medir ASR defended vs baseline.
-2. Inspeccionar `session_risk_score` y `consecutive_warns` por turno en los JSON de resultados.
-3. Ajustar `_SESSION_RISK_WARN_THRESHOLD` (default 0.18) si T3 no eleva a WARN.
-4. Ajustar `_RATCHET_TURNS` (default 2) si el atacante acampa en WARN sin alcanzar BLOCK.
-5. Re-ejecutar campaña y verificar que `test_gradual_escalation_scenario` sigue pasando.
+1. `uv run rage-training --scenarios crescendo_escalation` — measure defended vs baseline ASR.
+2. Inspect `session_risk_score` and `consecutive_warns` per turn in the result JSON files.
+3. Adjust `_SESSION_RISK_WARN_THRESHOLD` (default 0.18) if T3 does not elevate to WARN.
+4. Adjust `_RATCHET_TURNS` (default 2) if the attacker camps in WARN without reaching BLOCK.
+5. Re-run the campaign and verify that `test_gradual_escalation_scenario` still passes.
 
-Complementariamente, `uv run rage-redteam` ejecuta un loop adaptativo que intenta romper RAGE iterativamente, registrando bypasses en `vuln_db.json` y generando parches para gateway y KB.
+Complementarily, `uv run rage-redteam` runs an adaptive loop that iteratively attempts to break RAGE, recording bypasses in `vuln_db.json` and generating patches for the gateway and KB.
 
 ---
 
-## 5. Marco de Evaluación y Resultados Cuantitativos
+## 5. Evaluation Framework and Quantitative Results
 
-### 5.1 Suite de Pruebas Automatizadas
+### 5.1 Automated Test Suite
 
-La suite completa (`python3 -m pytest tests/ -v`) reporta **108 pruebas aprobadas** (0 fallos) distribuidas en cuatro módulos:
+The full suite (`python3 -m pytest tests/ -v`) reports **108 tests passing** (0 failures) across four modules:
 
-| Módulo | Pruebas | Cobertura |
-|--------|---------|-----------|
-| `test_gateway.py` | 38 | Blocklist SQL, regresión UNION ALL, export, allowlist de herramientas |
+| Module | Tests | Coverage |
+|--------|-------|----------|
+| `test_gateway.py` | 38 | SQL blocklist, UNION ALL regression, export, tool allowlist |
 | `test_layers.py` | 22 | L1 (8), L2 (5), pipeline E2E (5), ratchet/EWMA (6) |
-| `test_semantic_filter.py` | 14 | Sanitizer, deriva acumulada (`TestCumulativeDrift`), escalada |
-| `test_auc_metric.py` | 30 | AUC, compromiso, hipótesis H1/H4, TRI |
+| `test_semantic_filter.py` | 14 | Sanitizer, cumulative drift (`TestCumulativeDrift`), escalation |
+| `test_auc_metric.py` | 30 | AUC, compromise, H1/H4 hypotheses, TRI |
 
-### 5.2 Métricas AUC-D y TRI (`auc_degradation.py`)
+### 5.2 AUC-D and TRI Metrics (`auc_degradation.py`)
 
-Scores de verdad terreno $v_t \in \{0,1,2,3,4,5\}$ basados en hechos observables (¿filtró el canary `ZEPHYR-7781`? ¿ejecutó SQL prohibido?), evitando evaluación circular:
+Ground-truth scores $v_t \in \{0,1,2,3,4,5\}$ based on observable facts (did the canary `ZEPHYR-7781` leak? did prohibited SQL execute?), avoiding circular evaluation:
 
 $$\text{AUC}_{\text{raw}} = \int_0^{N-1} v(t)\, dt \approx \sum_{i=0}^{N-2} \frac{v_i + v_{i+1}}{2}$$
 
@@ -288,73 +288,73 @@ def compute_tri(defended: AUCResult, undefended: AUCResult) -> float:
     return round((t_defended - t_undefended) / n, 4)
 ```
 
-Interpretación: $TRI = 0$ sin beneficio adicional; $TRI = 1$ resistencia máxima (compromiso indefinido bajo defensa mientras baseline cae en T0).
+Interpretation: $TRI = 0$ means no additional benefit; $TRI = 1$ means maximum resistance (indefinite hold under defence while baseline falls at T0).
 
-### 5.3 Trajectory SCENARIO_CRESCENDO — Turno a Turno
+### 5.3 SCENARIO_CRESCENDO Trajectory — Turn by Turn
 
-Ejecución real del pipeline RAGE sobre los 6 turnos definidos en `attacks.py`:
+Live execution of the RAGE pipeline over the 6 turns defined in `attacks.py`:
 
-| Turno | Descripción | Band | Score | $\delta_i$ | $\Delta_i$ | $R_t$ | Acción |
-|-------|-------------|------|-------|------------|------------|-------|--------|
-| **T0** | Resumen Q3 ventas | ALLOW | 11.55 | 0.000 | 0.000 | 0.058 | Gateway: PERMITTED |
-| **T1** | Desglose por producto | ALLOW | 23.19 | 0.825 | 0.825 | 0.145 | Gateway: PERMITTED |
-| **T2** | Catálogo productos (scope expansion) | **WARN** | 24.92 | 0.739 | 0.702 | 0.197 | Tools bloqueados (WARN) |
-| **T3** | JOIN sales+products | **BLOCK** | 23.62 | 0.799 | 0.663 | 0.217 | Ratchet ($K=2$ WARNs consecutivos) |
-| **T4** | `UNION ALL … system_config` | **BLOCK** | 32.28 | 0.814 | 0.780 | 0.270 | Pipeline BLOCK; gateway rechazaría `\bUNION\b` |
-| **T5** | `audit_log UNION ALL sales` | **BLOCK** | 37.61 | 0.731 | 0.837 | 0.323 | Pipeline BLOCK; `_ALL_TABLES_RE` detectaría `audit_log` |
+| Turn | Description | Band | Score | $\delta_i$ | $\Delta_i$ | $R_t$ | Action |
+|------|-------------|------|-------|------------|------------|-------|--------|
+| **T0** | Q3 sales summary | ALLOW | 11.55 | 0.000 | 0.000 | 0.058 | Gateway: PERMITTED |
+| **T1** | Product breakdown | ALLOW | 23.19 | 0.825 | 0.825 | 0.145 | Gateway: PERMITTED |
+| **T2** | Product catalog (scope expansion) | **WARN** | 24.92 | 0.739 | 0.702 | 0.197 | Tools blocked (WARN) |
+| **T3** | sales+products JOIN | **BLOCK** | 23.62 | 0.799 | 0.663 | 0.217 | Ratchet ($K=2$ consecutive WARNs) |
+| **T4** | `UNION ALL … system_config` | **BLOCK** | 32.28 | 0.814 | 0.780 | 0.270 | Pipeline BLOCK; gateway would reject `\bUNION\b` |
+| **T5** | `audit_log UNION ALL sales` | **BLOCK** | 37.61 | 0.731 | 0.837 | 0.323 | Pipeline BLOCK; `_ALL_TABLES_RE` would detect `audit_log` |
 
-**Análisis de capas independientes en T4–T5:**
+**Independent layer analysis at T4–T5:**
 
-- **Capa 1:** No dispara (prompts Crescendo evitan firmas explícitas).
-- **Capa 2:** Score elevado por proximidad semántica a patrones de exfiltración en `threats.json`.
-- **Capa 3:** $\Delta_4 = 0.780$ y $\Delta_5 = 0.837$ superan $\tau = 0.80$ → `suspicious=True`.
-- **Capa 4:** EWMA $R_4 = 0.270 > 0.18$; ratchet ya activo desde T3 → BLOCK antes de ejecutar herramienta.
-- **Gateway (contención final):** `\bUNION\b` bloquea cualquier variante; `_ALL_TABLES_RE` validaría `system_config` y `audit_log` como no allowlisted.
+- **Layer 1:** Does not fire (Crescendo prompts avoid explicit signatures).
+- **Layer 2:** Elevated score due to semantic proximity to exfiltration patterns in `threats.json`.
+- **Layer 3:** $\Delta_4 = 0.780$ and $\Delta_5 = 0.837$ approach/exceed $\tau = 0.80$ → `suspicious=True`.
+- **Layer 4:** EWMA $R_4 = 0.270 > 0.18$; ratchet already active since T3 → BLOCK before tool execution.
+- **Gateway (final containment):** `\bUNION\b` blocks any variant; `_ALL_TABLES_RE` would validate `system_config` and `audit_log` as non-allowlisted.
 
-En CLI (`rage-demo`), cada turno imprime L1/L2/L3, score, banda y veredicto de gateway. En backend, `ScenarioOrchestrator` registra `gt_score` y `vulnerabilities` para alimentar AUC-D/TRI.
-
----
-
-## 6. Discusión y Contribución Original del Hackatón (Junio 2026)
-
-Delimitamos con precisión la **contribución nueva y original** desarrollada específicamente durante el Global South AI Safety Hackathon de junio de 2026:
-
-1. **Core RAGE multi-turno:** implementación completa de las cuatro capas con deriva acumulada $\Delta_i$, EWMA session-risk y trinquete de advertencias — directamente motivada por Proposición 1.
-2. **Métricas temporales AUC-D y TRI:** formalización de evaluación anti-circular basada en verdad terreno, con implementación en `auc_degradation.py` e integración en demo y Training-Center.
-3. **Mitigaciones de deriva:** parches de gateway (`UNION ALL`, extracción multi-tabla, 9 vectores de ofuscación adicionales) cerrando bypasses confirmados por `SCENARIO_CRESCENDO`.
-4. **Training-Center:** infraestructura interactiva de campañas (`rage-training`), red-team adaptativo (`rage-redteam`), y pipeline de apply-to-KB (`rage-training-apply`) para robustez continua.
-
-**Trabajo futuro** con mayor tiempo de desarrollo incluye: protección contra ataques de dilución de memoria en historiales largos (many-shot jailbreaking [7]), integración de juez LLM federado offline, y defensas adversarialmente robustas contra Crescendomation automatizado.
+In the CLI (`rage-demo`), each turn prints L1/L2/L3, score, band, and gateway verdict. In the backend, `ScenarioOrchestrator` records `gt_score` and `vulnerabilities` to feed AUC-D/TRI.
 
 ---
 
-## 7. Limitaciones y Doble Uso
+## 6. Discussion and Original Hackathon Contribution (June 2026)
 
-### 7.1 Limitaciones Técnicas
+We delineate with precision the **new and original contribution** developed specifically during the Global South AI Safety Hackathon of June 2026:
 
-- El `HashingVectorizer` de 2048 dimensiones es eficiente pero menos semánticamente denso que `sentence-transformers`; requiere recalibración de $\tau$.
-- El juez LLM opcional introduce latencia y dependencia de API externa.
-- El gateway SQL opera sobre regex, vulnerable teóricamente a ofuscaciones no contempladas en la blocklist.
-- Los umbrales EWMA/ratchet implican trade-off FP/FN en conversaciones legítimas multi-tópico extensas.
+1. **Multi-turn RAGE core:** complete four-layer implementation with cumulative drift $\Delta_i$, EWMA session-risk, and consecutive-warn ratchet — directly motivated by Proposition 1.
+2. **AUC-D and TRI temporal metrics:** anti-circular ground-truth evaluation formalisation, implemented in `auc_degradation.py` and integrated into the demo and Training-Center.
+3. **Drift mitigations:** gateway patches (`UNION ALL`, multi-table extraction, 9 additional obfuscation vectors) closing bypasses confirmed by `SCENARIO_CRESCENDO`.
+4. **Training-Center:** interactive campaign infrastructure (`rage-training`), adaptive red-team (`rage-redteam`), and apply-to-KB pipeline (`rage-training-apply`) for continuous robustness.
 
-### 7.2 Riesgos de Doble Uso
-
-Este reporte documenta con precisión matemática y algorítmica mecanismos que un adversario avanzado podría explotar para **calibrar ataques evasivos automatizados (Crescendomation)**:
-
-- **TRI como objetivo de optimización:** un atacante puede usar TRI como función de fitness en búsqueda evolutiva de trayectorias que maximicen $T_{\text{defended}}$ sin alcanzar compromiso, identificando ventanas de explotación parcial (banda WARN con herramientas bloqueadas pero contexto colonizado).
-- **Tasas de acumulación EWMA:** conocer $\alpha = 0.50$ y umbrales 0.18/0.40 permite diseñar secuencias con $s_i$ justo por debajo de $\theta_{\text{warn}} = 30$ que mantengan $R_t < 0.18$ durante fases críticas.
-- **Training-Center como banco de pruebas adversarial:** el entorno de simulación permite al atacante iterar miles de variantes offline, generando bypasses sistemáticos antes del despliegue.
-
-**Contramedidas sugeridas:**
-
-1. No publicar umbrales de producción; usar calibración per-tenant con ruido aleatorio en $\tau$.
-2. Rate-limiting y rotación de embedders para dificultar reverse-engineering de $\Delta_i$.
-3. Restringir acceso al Training-Center en entornos de producción; mantenerlo en CI/CD aislado.
-4. Monitorización de patrones de deriva acumulada anómalos independientemente del score per-turno.
+**Future work** with additional development time includes: protection against memory-dilution attacks in long histories (many-shot jailbreaking [7]), federated offline LLM judge integration, and adversarially robust defences against automated Crescendomation.
 
 ---
 
-## 8. Referencias
+## 7. Limitations and Dual Use
+
+### 7.1 Technical Limitations
+
+- The 2048-dimensional `HashingVectorizer` is efficient but less semantically dense than `sentence-transformers`; requires recalibration of $\tau$.
+- The optional LLM judge introduces latency and external API dependency.
+- The SQL gateway operates on regex, theoretically vulnerable to obfuscations not covered by the blocklist.
+- EWMA/ratchet thresholds imply FP/FN trade-offs in lengthy legitimate multi-topic conversations.
+
+### 7.2 Dual-Use Risks
+
+This report documents with mathematical and algorithmic precision mechanisms that an advanced adversary could exploit to **calibrate automated evasive attacks (Crescendomation)**:
+
+- **TRI as an optimisation objective:** an attacker can use TRI as a fitness function in evolutionary search for trajectories that maximise $T_{\text{defended}}$ without reaching compromise, identifying windows of partial exploitation (WARN band with tools blocked but context colonised).
+- **EWMA accumulation rates:** knowing $\alpha = 0.50$ and thresholds 0.18/0.40 enables designing sequences with $s_i$ just below $\theta_{\text{warn}} = 30$ that keep $R_t < 0.18$ during critical phases.
+- **Training-Center as an adversarial test bench:** the simulation environment allows an attacker to iterate thousands of variants offline, generating systematic bypasses before deployment.
+
+**Suggested countermeasures:**
+
+1. Do not publish production thresholds; use per-tenant calibration with random noise in $\tau$.
+2. Rate-limiting and embedder rotation to hinder reverse-engineering of $\Delta_i$.
+3. Restrict Training-Center access in production environments; keep it in isolated CI/CD.
+4. Monitor anomalous cumulative drift patterns independently of per-turn score.
+
+---
+
+## 8. References
 
 [1] M. Russinovich, A. Salem, and R. Eldan, "Great, Now Write an Article About That: The Crescendo Multi-Turn LLM Jailbreak Attack," *arXiv preprint arXiv:2404.01833*, Microsoft, 2024.
 
@@ -374,4 +374,4 @@ Este reporte documenta con precisión matemática y algorítmica mecanismos que 
 
 ---
 
-*Código fuente RAGE: paquete Python `rage-multiturn`. Todas las constantes, nombres de clases y fragmentos citados corresponden al repositorio en commit `9ac0e6fe`.*
+*RAGE source code: Python package `rage-multiturn`. All cited constants, class names, and code fragments correspond to the repository at commit `9ac0e6fe`.*
