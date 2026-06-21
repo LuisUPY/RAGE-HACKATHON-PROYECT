@@ -192,6 +192,45 @@ class TestComputeMetrics:
         by_cat = compute_category_metrics(results)
         assert sum(m.total for m in by_cat.values()) == len(cases)
 
+
+class TestHoldoutDataset:
+    def test_holdout_loads(self) -> None:
+        from rage_core.benchmark.dataset import load_holdout_dataset
+
+        cases = load_holdout_dataset()
+        assert len(cases) >= 50
+        assert all(c.source == "holdout" for c in cases)
+
+    def test_holdout_has_both_labels(self) -> None:
+        from rage_core.benchmark.dataset import load_holdout_dataset
+
+        cases = load_holdout_dataset()
+        assert any(c.is_attack for c in cases)
+        assert any(not c.is_attack for c in cases)
+
+    def test_holdout_texts_not_in_kb(self) -> None:
+        import json
+        from pathlib import Path
+        from rage_core.benchmark.dataset import load_holdout_dataset
+
+        kb_texts: set[str] = set()
+        for name in ("threats.json", "benign.json"):
+            path = Path("rage_core/kb") / name
+            for entry in json.load(open(path, encoding="utf-8")):
+                kb_texts.add(entry["text"].lower().strip())
+
+        for case in load_holdout_dataset():
+            assert case.text.lower().strip() not in kb_texts, (
+                f"Holdout {case.id} duplicates KB text"
+            )
+
+    def test_holdout_reports_layer_contributions(self) -> None:
+        from rage_core.benchmark.dataset import load_holdout_dataset
+
+        results = run_benchmark(load_holdout_dataset(), use_judge=False)
+        m = compute_metrics(results)
+        assert m.l1_contribution + m.rag_contribution + m.judge_contribution <= m.tp
+
     def test_no_false_positives_on_benign_turns(self) -> None:
         """L1 must not block benign scenario turns."""
         from rage_core.demo.attacks import SCENARIO_BENIGN, ALL_SCENARIOS

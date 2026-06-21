@@ -33,6 +33,7 @@ dev = [
 [project.scripts]
 rage-chat  = "rage_core.demo.chat_cli:main"
 rage-bench = "rage_core.benchmark.cli:main"
+rage-bench-holdout = "rage_core.benchmark.cli:main_holdout"
 
 [tool.hatch.build.targets.wheel]
 packages = ["rage_core"]

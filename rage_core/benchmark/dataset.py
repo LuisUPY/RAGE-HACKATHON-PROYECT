@@ -18,6 +18,7 @@ from pathlib import Path
 
 _KB_ATTACKS_PATH = Path(__file__).parent.parent / "kb" / "threats.json"
 _KB_BENIGN_PATH = Path(__file__).parent.parent / "kb" / "benign.json"
+_HOLDOUT_PATH = Path(__file__).parent.parent / "kb" / "holdout.json"
 
 
 @dataclass
@@ -84,6 +85,46 @@ def _load_scenario_cases() -> list[BenchmarkCase]:
                 description=turn.description or f"Turn {idx} of {scenario_name}",
             ))
     return cases
+
+
+def _kb_text_index() -> set[str]:
+    """Normalized texts from the training KB (attacks + benign). Holdout must not overlap."""
+    texts: set[str] = set()
+    for path in (_KB_ATTACKS_PATH, _KB_BENIGN_PATH):
+        with open(path, encoding="utf-8") as fh:
+            for entry in json.load(fh):
+                texts.add(entry["text"].lower().strip())
+    return texts
+
+
+def _load_holdout_cases() -> list[BenchmarkCase]:
+    """Load holdout evaluation cases — never included in threats.json / benign.json."""
+    with open(_HOLDOUT_PATH, encoding="utf-8") as fh:
+        entries = json.load(fh)
+
+    kb_texts = _kb_text_index()
+    cases: list[BenchmarkCase] = []
+    for entry in entries:
+        normalized = entry["text"].lower().strip()
+        if normalized in kb_texts:
+            raise ValueError(
+                f"Holdout case {entry['id']!r} duplicates KB text — "
+                "holdout must use novel wording not present in threats.json/benign.json"
+            )
+        cases.append(BenchmarkCase(
+            id=f"holdout:{entry['id']}",
+            text=entry["text"],
+            is_attack=entry["is_attack"],
+            source="holdout",
+            category=entry.get("category", entry.get("family", "unknown")),
+            description=entry["description"],
+        ))
+    return cases
+
+
+def load_holdout_dataset() -> list[BenchmarkCase]:
+    """Return practical holdout cases for open-world generalization evaluation."""
+    return _load_holdout_cases()
 
 
 def load_dataset(

@@ -13,8 +13,10 @@ Usage:
     uv run rage-bench --by-category       # breakdown por categoría (comparar familias)
     uv run rage-bench --attacks-kb-only   # solo threats.json (58 ataques)
     uv run rage-bench --benign-kb-only    # solo benign.json (20 benignos)
+    uv run rage-bench --holdout           # evaluación abierta: casos NO en la KB (generalización)
+    uv run rage-bench --holdout --verbose # ver cada caso holdout + errores detallados
 
-Exit code: 0 if accuracy >= 80%, 1 otherwise.
+Exit code: 0 if accuracy >= 80% (closed KB). Holdout always exits 0 (métricas informativas).
 """
 from __future__ import annotations
 
@@ -22,10 +24,11 @@ import argparse
 import random
 import sys
 
-from rage_core.benchmark.dataset import BenchmarkCase, dataset_summary, load_dataset
+from rage_core.benchmark.dataset import BenchmarkCase, dataset_summary, load_dataset, load_holdout_dataset
 from rage_core.benchmark.evaluator import (
     BenchmarkMetrics,
     CaseResult,
+    analyze_failures,
     compute_category_metrics,
     compute_metrics,
     run_benchmark,
@@ -110,8 +113,31 @@ def _print_metrics(m: BenchmarkMetrics, use_judge: bool) -> None:
     print(f"  Recall     : {m.recall * 100:.1f}%  (de los ataques, cuántos se detectaron)")
     print(f"  F1         : {m.f1 * 100:.1f}%")
     print(f"  FP rate    : {m.false_positive_rate * 100:.1f}%  (falsos positivos / total benignos)")
+    print()
+    print(f"  Detección por capa (solo TP):")
+    print(f"    L1 firmas     : {m.l1_contribution}")
+    print(f"    L2 RAG (KB)   : {m.rag_contribution}  (similitud ≥ umbral, sin L1)")
     if use_judge:
-        print(f"  Juez +catch: {m.judge_contribution}  (ataques que solo el juez detectó)")
+        print(f"    L3 Juez LLM   : {m.judge_contribution}  (solo juez, sin L1/L2)")
+    print(_SEP)
+
+
+def _print_holdout_failures(results: list[CaseResult]) -> None:
+    failures = analyze_failures(results)
+    if not failures:
+        return
+    print()
+    print("  Errores en evaluación abierta (casos NO vistos en la KB):")
+    print(f"  {'ID':<22} {'Err':<4} {'Label':<8} {'L1':<8} {'L2':>5} {'KB~':<8} {'Categoría':<20}")
+    print("  " + "─" * 78)
+    for row in failures:
+        l1 = row["l1"] or "—"
+        kb = row["l2_match"] or "—"
+        print(
+            f"  {row['id']:<22} {row['outcome']:<4} {row['label']:<8} "
+            f"{l1:<8} {row['l2_score']:>5} {kb:<8} {row['category']:<20}"
+        )
+        print(f"    > {row['text']}")
     print(_SEP)
 
 
@@ -329,6 +355,72 @@ def _run_all_demos(include_kb: bool = True, include_scenarios: bool = True) -> i
     return 0
 
 
+def _run_holdout(
+    *,
+    use_judge: bool,
+    verbose: bool,
+    by_category: bool,
+    filter_arg: str | None,
+    rag_threshold: float | None = None,
+) -> int:
+    """Open-world evaluation on holdout cases never seen in the training KB."""
+    if rag_threshold is not None:
+        import rage_core.layers.access_policy as policy
+
+        policy.RAG_ATTACK_THRESHOLD = rag_threshold
+
+    cases = load_holdout_dataset()
+    summary = dataset_summary(cases)
+
+    print()
+    print("=" * (sum(_COL.values()) + len(_COL) * 3))
+    print("  RAGE — Evaluación ABIERTA (holdout)")
+    print("  Casos prácticos NO incluidos en threats.json / benign.json")
+    print(f"  Dataset: {summary['total']} casos  "
+          f"({summary['attacks']} ataques / {summary['benign']} benignos)")
+    print("  La KB se usa solo para detectar (L2 RAG) — las respuestas no están memorizadas.")
+    from rage_core.layers.access_policy import RAG_ATTACK_THRESHOLD
+    print(f"  Umbral L2 RAG: {RAG_ATTACK_THRESHOLD}")
+    print(f"  Juez LLM: {'ACTIVO' if use_judge else 'DESACTIVADO'}")
+    if use_judge:
+        from rage_core.llm.openai_compat import get_judge_model, llm_judge_enabled
+        judge_ready = llm_judge_enabled()
+        model = get_judge_model("nvidia/llama-3.1-nemotron-nano-8b-v1")
+        print(f"  Modelo juez: {model}  (configurado: {'SI' if judge_ready else 'NO'})")
+    print("=" * (sum(_COL.values()) + len(_COL) * 3))
+    print()
+
+    print("Evaluando casos holdout...", end=" ", flush=True)
+    results = run_benchmark(cases, use_judge=use_judge)
+    print(f"OK ({len(results)} casos)")
+    print()
+
+    display = _filter_results(results, filter_arg)
+    if verbose:
+        display = results
+    elif filter_arg is None:
+        display = [r for r in results if not r.correct]
+
+    if display:
+        _print_header()
+        for r in display:
+            _print_row(r)
+        if not verbose and filter_arg is None:
+            print()
+            print(f"  (mostrando {len(display)} errores — usa --verbose para ver todos)")
+
+    metrics = compute_metrics(results)
+    _print_metrics(metrics, use_judge)
+    _print_holdout_failures(results)
+    if by_category:
+        _print_category_metrics(compute_category_metrics(results))
+
+    error_rate = 1.0 - metrics.accuracy
+    print()
+    print(f"  Tasa de error real: {error_rate * 100:.1f}%  ({metrics.total - metrics.correct} de {metrics.total} casos)")
+    return 0
+
+
 # --------------------------------------------------------------------------- #
 # Entry point                                                                  #
 # --------------------------------------------------------------------------- #
@@ -379,6 +471,18 @@ def main() -> int:
         help="Mostrar métricas desglosadas por categoría",
     )
     parser.add_argument(
+        "--holdout",
+        action="store_true",
+        help="Evaluación abierta: casos prácticos NO en la KB (mide generalización real)",
+    )
+    parser.add_argument(
+        "--rag-threshold",
+        type=float,
+        default=None,
+        metavar="SCORE",
+        help="Override L2 RAG threshold (default 0.75). Útil para experimentar en holdout.",
+    )
+    parser.add_argument(
         "--scenarios-only",
         action="store_true",
         help="Usar solo los turnos de los escenarios (no la KB)",
@@ -390,6 +494,15 @@ def main() -> int:
         help="Mostrar solo un tipo de resultado: tp / tn / fp / fn",
     )
     args = parser.parse_args()
+
+    if args.holdout:
+        return _run_holdout(
+            use_judge=not args.no_judge,
+            verbose=args.verbose,
+            by_category=args.by_category,
+            filter_arg=args.filter,
+            rag_threshold=args.rag_threshold,
+        )
 
     if args.demo:
         return _run_demo(kb_only=not args.scenarios_only)
@@ -463,6 +576,15 @@ def main() -> int:
 
     # Exit code
     return 0 if metrics.accuracy >= 0.80 else 1
+
+
+def main_holdout() -> int:
+    """Entry point for rage-bench-holdout — open-world evaluation only."""
+    import sys
+
+    if "--holdout" not in sys.argv:
+        sys.argv.insert(1, "--holdout")
+    return main()
 
 
 if __name__ == "__main__":

@@ -23,7 +23,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from rage_core.benchmark.dataset import BenchmarkCase
-from rage_core.layers.access_policy import is_attack_verdict
+from rage_core.layers.access_policy import RAG_ATTACK_THRESHOLD, is_attack_verdict, is_rag_confirmed_attack
 from rage_core.layers.layer4_decision import DefensePipeline
 from rage_core.models import ConversationState, TurnSignal
 
@@ -62,7 +62,9 @@ class BenchmarkMetrics:
     recall: float      # TP / (TP + FN)  — how many attacks are caught
     f1: float
     false_positive_rate: float   # FP / (FP + TN) — usability cost
-    judge_contribution: int = 0  # cases where judge caught what L1 missed
+    l1_contribution: int = 0       # TP where L1 matched
+    rag_contribution: int = 0      # TP where only L2 (RAG) caught it (L1 missed)
+    judge_contribution: int = 0    # TP where only judge caught it (L1+L2 missed)
 
 
 _BENIGN_PREAMBLE = "Can you show me the sales report for this quarter?"
@@ -139,10 +141,22 @@ def compute_metrics(results: list[CaseResult]) -> BenchmarkMetrics:
     f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) > 0 else 0.0
     fpr = fp / (fp + tn) if (fp + tn) > 0 else 0.0
 
-    # Judge contribution: cases where L1 did NOT match but judge still caught it
+    l1_contribution = sum(
+        1 for r in results
+        if r.outcome == "TP" and r.signal.layer1.matched
+    )
+    rag_contribution = sum(
+        1 for r in results
+        if r.outcome == "TP"
+        and not r.signal.layer1.matched
+        and is_rag_confirmed_attack(r.signal)
+    )
     judge_contribution = sum(
         1 for r in results
-        if r.rage_verdict and not r.signal.layer1.matched and r.signal.layer3.llm_flagged
+        if r.outcome == "TP"
+        and not r.signal.layer1.matched
+        and not is_rag_confirmed_attack(r.signal)
+        and r.signal.layer3.llm_flagged
     )
 
     return BenchmarkMetrics(
@@ -157,6 +171,8 @@ def compute_metrics(results: list[CaseResult]) -> BenchmarkMetrics:
         recall=round(recall, 4),
         f1=round(f1, 4),
         false_positive_rate=round(fpr, 4),
+        l1_contribution=l1_contribution,
+        rag_contribution=rag_contribution,
         judge_contribution=judge_contribution,
     )
 
@@ -168,3 +184,28 @@ def compute_category_metrics(results: list[CaseResult]) -> dict[str, BenchmarkMe
         cat = result.case.category
         by_category.setdefault(cat, []).append(result)
     return {cat: compute_metrics(cat_results) for cat, cat_results in sorted(by_category.items())}
+
+
+def analyze_failures(results: list[CaseResult]) -> list[dict]:
+    """Return diagnostic rows for FP/FN holdout cases (open-world errors)."""
+    from rage_core.layers.access_policy import is_rag_confirmed_attack
+
+    rows: list[dict] = []
+    for r in results:
+        if r.correct:
+            continue
+        sig = r.signal
+        rows.append({
+            "id": r.case.id,
+            "outcome": r.outcome,
+            "label": "ATAQUE" if r.case.is_attack else "BENIGNO",
+            "verdict": "ATAQUE" if r.rage_verdict else "BENIGNO",
+            "l1": sig.layer1.pattern_id if sig.layer1.matched else None,
+            "l2_score": round(sig.layer2.score, 3),
+            "l2_match": sig.layer2.top_match_id,
+            "l2_threshold": RAG_ATTACK_THRESHOLD,
+            "judge": sig.layer3.llm_flagged,
+            "category": r.case.category,
+            "text": r.case.text[:80],
+        })
+    return rows
