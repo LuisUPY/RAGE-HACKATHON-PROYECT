@@ -91,6 +91,16 @@ ollama run qwen2.5:7b-instruct "Hola, responde en una linea"
 .\windows-ollama\scripts\run-training.ps1 --scenarios drop_table_escalation crescendo_escalation
 ```
 
+### Solo `qwen2:7b` (un modelo, sin mas descargas)
+
+```powershell
+.\windows-ollama\scripts\run-qwen2-7b.ps1
+.\windows-ollama\scripts\run-qwen2-7b.ps1 -Mode redteam -Severity high -Iterations 5
+.\windows-ollama\scripts\run-qwen2-7b.ps1 -Mode test-ollama
+```
+
+Perfil: [`profiles/qwen2-7b.env`](profiles/qwen2-7b.env). Solo descarga `qwen2:7b` si no esta instalado.
+
 ## Modelos recomendados (RTX 5050, 8 GB)
 
 | Rol | Modelo | VRAM aprox. |
