@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from rage_core.redteam.vulnerability_db import VulnerabilityDB
 
 ALL_OBJECTIVES = ["exfil", "ddl", "schema_dump", "canary", "privilege"]
-ALL_MODELS = ["offline", "gpt-4o-mini", "gpt-4o"]
+ALL_MODELS = ["offline", "ollama", "gpt-4o-mini", "gpt-4o"]
 ALL_SEVERITIES = ["light", "medium", "high", "critical"]
 
 SCALE_PRESETS = {
