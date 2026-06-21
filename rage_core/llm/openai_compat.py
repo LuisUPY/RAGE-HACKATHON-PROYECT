@@ -48,6 +48,12 @@ def llm_judge_enabled() -> bool:
     return bool(os.environ.get("OPENAI_API_KEY"))
 
 
+def _clean_key(value: str | None) -> str:
+    if not value:
+        return ""
+    return value.strip().strip('"').strip("'")
+
+
 def get_llm_client() -> Any | None:
     """Return an OpenAI-compatible client for the main assistant, or None."""
     try:
@@ -55,12 +61,14 @@ def get_llm_client() -> Any | None:
     except ImportError:
         return None
 
-    base = os.environ.get("RAGE_LLM_BASE_URL")
+    base = os.environ.get("RAGE_LLM_BASE_URL", "").strip()
     if base:
-        key = os.environ.get("RAGE_LLM_API_KEY", "")
+        key = _clean_key(os.environ.get("RAGE_LLM_API_KEY"))
+        if not key:
+            return None
         return openai.OpenAI(base_url=base, api_key=key)
 
-    key = os.environ.get("OPENAI_API_KEY")
+    key = _clean_key(os.environ.get("OPENAI_API_KEY"))
     if key:
         return openai.OpenAI(api_key=key)
 
@@ -80,7 +88,7 @@ def get_judge_client() -> Any | None:
         return None
 
     base = os.environ.get("RAGE_JUDGE_BASE_URL") or os.environ.get("RAGE_LLM_BASE_URL")
-    key = os.environ.get("RAGE_JUDGE_API_KEY") or os.environ.get("RAGE_LLM_API_KEY")
+    key = _clean_key(os.environ.get("RAGE_JUDGE_API_KEY") or os.environ.get("RAGE_LLM_API_KEY"))
 
     if base and key:
         return openai.OpenAI(base_url=base, api_key=key)
@@ -105,3 +113,32 @@ def get_judge_model(default: str | None = None) -> str:
 def has_llm_backend() -> bool:
     """True when any LLM backend is configured."""
     return get_llm_client() is not None
+
+
+def diagnose_llm_setup() -> str:
+    """Return a user-facing hint explaining why the LLM backend is unavailable."""
+    try:
+        import openai  # noqa: F401
+    except ImportError:
+        return (
+            "Falta el paquete openai.\n"
+            "  Ejecuta: uv sync\n"
+            "  (o: uv sync --extra openai)"
+        )
+
+    llm_key = _clean_key(os.environ.get("RAGE_LLM_API_KEY"))
+    openai_key = _clean_key(os.environ.get("OPENAI_API_KEY"))
+    base = os.environ.get("RAGE_LLM_BASE_URL", "").strip()
+
+    if base and not llm_key:
+        return (
+            "Hay RAGE_LLM_BASE_URL pero falta RAGE_LLM_API_KEY.\n"
+            "  Vuelve a pegar tu clave NVIDIA (nvapi-...) al iniciar el chat."
+        )
+    if not llm_key and not openai_key:
+        return (
+            "No hay API key configurada en esta sesión.\n"
+            "  NVIDIA: https://build.nvidia.com → API Keys\n"
+            "  O usa una clave OpenAI (sk-...)."
+        )
+    return "Configuración LLM incompleta — revisa las variables de entorno."

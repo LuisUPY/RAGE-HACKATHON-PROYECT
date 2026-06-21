@@ -4,6 +4,7 @@ from __future__ import annotations
 import pytest
 
 from rage_core.llm.openai_compat import (
+    diagnose_llm_setup,
     get_judge_client,
     get_judge_model,
     get_llm_client,
@@ -111,6 +112,26 @@ def test_get_llm_client_openai_fallback(monkeypatch: pytest.MonkeyPatch) -> None
 
 def test_get_llm_client_none_without_config() -> None:
     assert get_llm_client() is None
+
+
+def test_get_llm_client_none_with_base_but_no_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    pytest.importorskip("openai")
+    monkeypatch.setenv("RAGE_LLM_BASE_URL", "https://integrate.api.nvidia.com/v1")
+    assert get_llm_client() is None
+    assert has_llm_backend() is False
+
+
+def test_diagnose_llm_setup_missing_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    pytest.importorskip("openai")
+    monkeypatch.setenv("RAGE_LLM_BASE_URL", "https://integrate.api.nvidia.com/v1")
+    msg = diagnose_llm_setup()
+    assert "RAGE_LLM_API_KEY" in msg
+
+
+def test_diagnose_llm_setup_no_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    pytest.importorskip("openai")
+    msg = diagnose_llm_setup()
+    assert "API key" in msg
 
 
 # --------------------------------------------------------------------------- #

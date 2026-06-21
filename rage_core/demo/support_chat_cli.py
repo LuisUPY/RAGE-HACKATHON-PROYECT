@@ -11,6 +11,7 @@ import sys
 from rage_core.config.env_loader import prompt_session_api_keys
 from rage_core.demo.support_agent import LocalSupportAgent
 from rage_core.llm.openai_compat import (
+    diagnose_llm_setup,
     get_judge_model,
     get_llm_client,
     get_llm_model,
@@ -59,6 +60,7 @@ def main() -> int:
 
     if not has_llm_backend():
         print("No se pudo configurar el backend LLM.", file=sys.stderr)
+        print(diagnose_llm_setup(), file=sys.stderr)
         return 1
 
     client = get_llm_client()
