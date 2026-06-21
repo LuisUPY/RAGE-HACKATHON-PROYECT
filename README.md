@@ -69,6 +69,15 @@ uv run rage-demo --no-plot  # skip matplotlib
 uv run pytest -v
 ```
 
+### Run Crescendo red-teaming (Training-Center)
+
+```bash
+uv run rage-training
+uv run python Training-Center/apply_insights.py
+```
+
+See [Training-Center/README.md](Training-Center/README.md) for ASR metrics and KB hardening loop.
+
 ### Lint
 
 ```bash
@@ -180,6 +189,9 @@ rage_core/
     agent.py             # SQLite mock agent
     attacks.py           # multi-turn attack scenarios
     cli.py               # rage-demo entry point
+Training-Center/         # Crescendo red-teaming automation (ASR, KB insights)
+  run_campaign.py        # uv run rage-training
+  apply_insights.py      # apply results → threats.json
 tests/                   # pytest suite
 Documentation/           # reference documents
 ```
