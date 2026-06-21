@@ -6,6 +6,7 @@ Documentación en español del proyecto.
 |---------|---------|-------------|
 | [training-center-manual.md](training-center-manual.md) | Markdown | Fuente editable del manual |
 | [training-center-manual.pdf](training-center-manual.pdf) | PDF | Manual listo para imprimir o compartir |
+| [training-center-diagramas.md](training-center-diagramas.md) | Markdown | Diagramas de flujo del Training-Center |
 
 ## Regenerar el PDF
 
