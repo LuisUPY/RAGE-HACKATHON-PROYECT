@@ -374,4 +374,4 @@ This report documents with mathematical and algorithmic precision mechanisms tha
 
 ---
 
-*RAGE source code: Python package `rage-multiturn`. All cited constants, class names, and code fragments correspond to the repository at commit `9ac0e6fe`.*
+*RAGE source code: Python package `rage-multiturn`. All cited constants, class names, and code fragments correspond to the repository at commit `884ed591`.*

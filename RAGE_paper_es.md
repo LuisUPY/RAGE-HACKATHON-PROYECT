@@ -374,4 +374,4 @@ Este reporte documenta con precisión matemática y algorítmica mecanismos que 
 
 ---
 
-*Código fuente RAGE: paquete Python `rage-multiturn`. Todas las constantes, nombres de clases y fragmentos citados corresponden al repositorio en commit `9ac0e6fe`.*
+*Código fuente RAGE: paquete Python `rage-multiturn`. Todas las constantes, nombres de clases y fragmentos citados corresponden al repositorio en commit `884ed591`.*
