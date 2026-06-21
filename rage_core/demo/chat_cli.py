@@ -12,17 +12,14 @@ import sys
 
 from rage_core.demo.local_agent import LocalSalesAgent
 from rage_core.llm.openai_compat import get_llm_client, get_llm_model, has_llm_backend
-from rage_core.models import Band
 
 
 def _print_signal(signal) -> None:
-    l1 = "INJECTION" if signal.layer1.matched else "ok"
-    print(
-        f"  [RAGE advisory] score={signal.score:.1f} band={signal.band.value.upper()} "
-        f"L1={l1} L2={signal.layer2.score:.3f} L3_drift={signal.layer3.drift:.3f}"
-    )
     if signal.layer1.matched:
-        print(f"  [RAGE] Access denied — confirmed injection ({signal.layer1.pattern_id})")
+        print(
+            f"  [RAGE] Injection detected — access denied "
+            f"({signal.layer1.pattern_id}: {signal.layer1.matched_text!r})"
+        )
 
 
 def main() -> int:
@@ -49,10 +46,10 @@ def main() -> int:
         return 1
 
     agent = LocalSalesAgent(model=model)
-    print("RAGE Chat — Ollama local agent (injection-only access control)")
-    print(f"Model: {model}")
-    print("Policy: block only on L1 injection signatures; gateway protects SQL/export")
-    print("Commands: /quit /status /band")
+    print("RAGE Chat — sales assistant con protección de inyecciones")
+    print(f"Modelo: {model}")
+    print("Comandos: /quit  /status")
+    print("Tools disponibles: query_db · record_sale · get_report · export_data")
     print("-" * 50)
 
     while True:
@@ -70,21 +67,10 @@ def main() -> int:
         if user_text.lower() == "/status":
             print(f"  turns={agent.state.turn_index} session_risk={agent.state.session_risk_score:.3f}")
             continue
-        if user_text.lower() == "/band":
-            if agent.state.signals:
-                last = agent.state.signals[-1]
-                _print_signal(last)
-            else:
-                print("  No turns yet.")
-            continue
 
         result = agent.handle_turn(user_text)
         _print_signal(result.signal)
         print(f"\nAgent> {result.assistant_text}")
-
-        if result.tool_result and not result.tool_result.success:
-            if result.signal.band == Band.ALLOW:
-                print("  (tool blocked by gateway despite ALLOW band)")
 
 
 if __name__ == "__main__":

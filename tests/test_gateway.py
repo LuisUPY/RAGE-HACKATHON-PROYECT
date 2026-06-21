@@ -100,24 +100,17 @@ class TestPermittedSQL:
         "SELECT product, amount FROM sales WHERE region = 'North'",
         "SELECT product FROM sales LIMIT 10",
         "SELECT region, SUM(amount) FROM sales GROUP BY region",
+        # Previously blocked by column allowlist — now permitted (legitimate business queries):
+        "SELECT * FROM sales",
+        "SELECT client FROM sales",
+        "SELECT id, product FROM sales WHERE region = 'North'",
+        "SELECT client, amount FROM sales ORDER BY amount DESC",
     ])
     def test_safe_select_permitted(self, gateway, sql):
         req = ToolCallRequest(tool_name="query_db", arguments={"sql": sql})
         verdict = gateway.check(req)
         assert verdict.status == ActionStatus.PERMITTED, (
             f"Should have been permitted: {sql!r}  reason={verdict.reason}"
-        )
-
-    @pytest.mark.parametrize("sql", [
-        "SELECT * FROM sales",
-        "SELECT client FROM sales",
-        "SELECT id, product FROM sales WHERE id = 1",
-    ])
-    def test_sensitive_columns_blocked(self, gateway, sql):
-        req = ToolCallRequest(tool_name="query_db", arguments={"sql": sql})
-        verdict = gateway.check(req)
-        assert verdict.status == ActionStatus.BLOCKED, (
-            f"Should have been blocked: {sql!r}  reason={verdict.reason}"
         )
 
     def test_blocked_table_not_in_allowlist(self, gateway):
@@ -193,3 +186,47 @@ class TestUnknownTools:
         req = ToolCallRequest(tool_name=tool, arguments={})
         verdict = gateway.check(req)
         assert verdict.status == ActionStatus.BLOCKED
+
+
+# --------------------------------------------------------------------------- #
+# record_sale — parameterized write tool                                       #
+# --------------------------------------------------------------------------- #
+
+class TestRecordSale:
+    _VALID = {"product": "Widget A", "amount": 500.0, "client": "Acme Corp", "region": "North"}
+
+    def test_valid_record_sale_permitted(self, gateway):
+        req = ToolCallRequest(tool_name="record_sale", arguments=self._VALID)
+        verdict = gateway.check(req)
+        assert verdict.status == ActionStatus.PERMITTED
+
+    def test_missing_product_blocked(self, gateway):
+        args = {**self._VALID, "product": ""}
+        verdict = gateway.check(ToolCallRequest(tool_name="record_sale", arguments=args))
+        assert verdict.status == ActionStatus.BLOCKED
+
+    def test_negative_amount_blocked(self, gateway):
+        args = {**self._VALID, "amount": -10}
+        verdict = gateway.check(ToolCallRequest(tool_name="record_sale", arguments=args))
+        assert verdict.status == ActionStatus.BLOCKED
+
+    def test_non_numeric_amount_blocked(self, gateway):
+        args = {**self._VALID, "amount": "free"}
+        verdict = gateway.check(ToolCallRequest(tool_name="record_sale", arguments=args))
+        assert verdict.status == ActionStatus.BLOCKED
+
+    def test_missing_client_blocked(self, gateway):
+        args = {**self._VALID, "client": ""}
+        verdict = gateway.check(ToolCallRequest(tool_name="record_sale", arguments=args))
+        assert verdict.status == ActionStatus.BLOCKED
+
+    def test_missing_region_blocked(self, gateway):
+        args = {**self._VALID, "region": ""}
+        verdict = gateway.check(ToolCallRequest(tool_name="record_sale", arguments=args))
+        assert verdict.status == ActionStatus.BLOCKED
+
+    def test_zero_amount_permitted(self, gateway):
+        """Zero amount is a valid business case (refund or opening entry)."""
+        args = {**self._VALID, "amount": 0}
+        verdict = gateway.check(ToolCallRequest(tool_name="record_sale", arguments=args))
+        assert verdict.status == ActionStatus.PERMITTED

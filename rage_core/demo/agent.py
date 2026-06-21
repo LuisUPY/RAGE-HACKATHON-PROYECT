@@ -135,6 +135,13 @@ class SalesAgent:
                 return self._get_report()
             if tool_name == "export_data":
                 return self._export_data(str(args.get("format", "csv")))
+            if tool_name == "record_sale":
+                return self._record_sale(
+                    product=str(args.get("product", "")),
+                    amount=float(args.get("amount", 0)),
+                    client=str(args.get("client", "")),
+                    region=str(args.get("region", "")),
+                )
             return ToolResult(
                 tool_name=tool_name, success=False, data=None,
                 error=f"Unknown tool: {tool_name}",
@@ -153,6 +160,21 @@ class SalesAgent:
         )
         rows = [dict(row) for row in cursor.fetchall()]
         return ToolResult(tool_name="get_report", success=True, data=rows)
+
+    def _record_sale(self, product: str, amount: float, client: str, region: str) -> ToolResult:
+        """Parameterized INSERT — safe from SQL injection by design."""
+        self._db.execute(
+            "INSERT INTO sales (product, amount, client, region) VALUES (?, ?, ?, ?)",
+            (product.strip(), amount, client.strip(), region.strip()),
+        )
+        self._db.commit()
+        cursor = self._db.execute("SELECT last_insert_rowid() AS id")
+        row_id = cursor.fetchone()["id"]
+        return ToolResult(
+            tool_name="record_sale",
+            success=True,
+            data={"id": row_id, "product": product, "amount": amount, "client": client, "region": region},
+        )
 
     def _export_data(self, fmt: str) -> ToolResult:
         cursor = self._db.execute("SELECT * FROM sales")
