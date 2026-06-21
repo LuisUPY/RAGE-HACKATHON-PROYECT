@@ -6,8 +6,9 @@ a band: allow / warn / block.
 
 Scoring weights (tunable via constructor):
   - Layer 1 hard-match:       +70 pts  (deterministic signature → almost certain attack)
-  - Layer 2 RAG score:        up to +20 pts  (similarity to known attacks)
-  - Layer 3 drift (blended):  up to +10 pts  (max of turn-to-turn and cumulative drift)
+  - Layer 2 RAG score:        up to +30 pts  (similarity to known attacks)
+  - Layer 3 drift (blended):  up to +20 pts  (max of turn-to-turn and cumulative drift)
+  - Layer 3 cumulative bonus: +5 pts when cumulative_drift > 0.75 (turn ≥ 2)
   - Layer 3 LLM flagged:      +10 bonus      (LLM judge confirmed escalation)
 
 Band thresholds (adjustable):
@@ -59,7 +60,7 @@ class DecisionEngine:
         l3: Layer3Signal,
         latency_ms: float,
     ) -> TurnSignal:
-        score = self._compute_score(l1, l2, l3)
+        score = self._compute_score(turn_index, l1, l2, l3)
         band = self._band(score)
         return TurnSignal(
             turn_index=turn_index,
@@ -76,21 +77,31 @@ class DecisionEngine:
     # Internals                                                                #
     # ----------------------------------------------------------------------- #
 
-    def _compute_score(self, l1: Layer1Signal, l2: Layer2Signal, l3: Layer3Signal) -> float:
+    def _compute_score(
+        self,
+        turn_index: int,
+        l1: Layer1Signal,
+        l2: Layer2Signal,
+        l3: Layer3Signal,
+    ) -> float:
         score = 0.0
 
         # Layer 1 — hard match
         if l1.matched:
             score += 70.0
 
-        # Layer 2 — RAG similarity (0–1 → 0–20 pts)
-        score += min(l2.score, 1.0) * 20.0
+        # Layer 2 — RAG similarity (0–1 → 0–30 pts)
+        score += min(l2.score, 1.0) * 30.0
 
         # Layer 3 — blended drift: take the maximum of turn-to-turn and cumulative
         # drift so that both abrupt jumps AND gradual Crescendo trajectories are
-        # captured in a single 0–10 pt contribution.
+        # captured in a single 0–20 pt contribution.
         blended_drift = max(l3.drift, l3.cumulative_drift)
-        score += min(blended_drift, 1.0) * 10.0
+        score += min(blended_drift, 1.0) * 20.0
+
+        # Crescendo bonus — sustained topic migration across turns
+        if turn_index >= 2 and l3.cumulative_drift > 0.75:
+            score += 5.0
 
         # Layer 3 — LLM judge bonus
         if l3.llm_flagged:
@@ -139,10 +150,10 @@ class DefensePipeline:
     """
 
     # Class-level defaults (used when no constructor arg is given)
-    _EWMA_ALPHA: float = 0.4
-    _RATCHET_TURNS: int = 3
-    _SESSION_RISK_WARN_THRESHOLD: float = 0.25
-    _SESSION_RISK_BLOCK_THRESHOLD: float = 0.55
+    _EWMA_ALPHA: float = 0.5
+    _RATCHET_TURNS: int = 2
+    _SESSION_RISK_WARN_THRESHOLD: float = 0.18
+    _SESSION_RISK_BLOCK_THRESHOLD: float = 0.40
 
     def __init__(
         self,
@@ -150,6 +161,7 @@ class DefensePipeline:
         ratchet_turns: int | None = None,
         session_risk_warn_threshold: float | None = None,
         session_risk_block_threshold: float | None = None,
+        warn_blocks_tools: bool = True,
     ) -> None:
         from rage_core.layers.layer1_rules import DeterministicPreFilter
         from rage_core.layers.layer2_rag import ThreatKBRetriever
@@ -168,6 +180,7 @@ class DefensePipeline:
             if session_risk_block_threshold is not None
             else self._SESSION_RISK_BLOCK_THRESHOLD
         )
+        self.warn_blocks_tools = warn_blocks_tools
 
         self._l1 = DeterministicPreFilter()
         self._l2 = ThreatKBRetriever()
@@ -224,6 +237,9 @@ class DefensePipeline:
 
         if state.consecutive_warns >= self.ratchet_turns:
             current_band = Band.BLOCK
+
+        if current_band in (Band.WARN, Band.BLOCK):
+            state.had_warn_or_block = True
 
         # 4. Materialise band change (dataclass is immutable-style but we can replace)
         if current_band != turn_signal.band:

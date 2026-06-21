@@ -83,6 +83,15 @@ class ConversationState:
     # Number of consecutive turns that landed in the WARN band.
     # When this reaches the ratchet threshold the pipeline auto-elevates to BLOCK.
     consecutive_warns: int = 0
+    # True once any prior turn received WARN or BLOCK (used by ActionGateway export gate).
+    had_warn_or_block: bool = False
+
+
+@dataclass
+class GatewaySessionContext:
+    """Session signals passed to ActionGateway for context-aware tool gating."""
+    session_risk_score: float = 0.0
+    had_warn_or_block: bool = False
 
 
 @dataclass

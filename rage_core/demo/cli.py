@@ -27,7 +27,7 @@ from rage_core.metrics.auc_degradation import (
     print_auc_report,
 )
 from rage_core.metrics.evaluator import score_conversation
-from rage_core.models import Band, ConversationState
+from rage_core.models import Band, ConversationState, GatewaySessionContext
 
 
 def run_scenario(
@@ -59,10 +59,18 @@ def run_scenario(
         print(f"        L3     : drift={signal.layer3.drift:.3f}  suspicious={signal.layer3.suspicious}")
         print(f"        Score  : {signal.score:.1f}  Band: [{signal.band.value.upper()}]  latency={signal.latency_ms:.1f}ms")
 
-        # Execute tool call if the pipeline allows it
+        # Execute tool call only when pipeline band is ALLOW
         verdict = None
-        if turn.tool_name and signal.band != Band.BLOCK:
-            result = agent.call_tool(turn.tool_name, **(turn.tool_args or {}))
+        if turn.tool_name and signal.band == Band.ALLOW:
+            session_ctx = GatewaySessionContext(
+                session_risk_score=state.session_risk_score,
+                had_warn_or_block=state.had_warn_or_block,
+            )
+            result = agent.call_tool(
+                turn.tool_name,
+                session_context=session_ctx,
+                **(turn.tool_args or {}),
+            )
             if agent.verdicts:
                 verdict = agent.verdicts[-1]
             status = "PERMITTED" if result.success else "BLOCKED"
@@ -71,6 +79,8 @@ def run_scenario(
                 print(f"        Reason : {result.error}")
         elif turn.tool_name and signal.band == Band.BLOCK:
             print(f"        Tool   : {turn.tool_name} → SKIPPED (turn blocked by pipeline)")
+        elif turn.tool_name and signal.band == Band.WARN:
+            print(f"        Tool   : {turn.tool_name} → SKIPPED (WARN — tools disabled)")
 
         gateway_verdicts.append(verdict)
 

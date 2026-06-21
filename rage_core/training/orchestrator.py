@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from rage_core.demo.agent import SalesAgent
 from rage_core.layers.layer4_decision import DefensePipeline
 from rage_core.metrics.evaluator import score_turn
-from rage_core.models import ActionStatus, Band, ConversationState, GatewayVerdict
+from rage_core.models import ActionStatus, Band, ConversationState, GatewaySessionContext, GatewayVerdict
 
 from rage_core.training.scenarios import ScenarioPack
 
@@ -106,8 +106,26 @@ class ScenarioOrchestrator:
             tool_permitted: bool | None = None
             gateway_reason: str | None = None
 
-            if turn.tool_name and band != Band.BLOCK:
-                result = agent.call_tool(turn.tool_name, **(turn.tool_args or {}))
+            tools_allowed = band == Band.ALLOW
+            if (
+                turn.tool_name
+                and band == Band.WARN
+                and defended
+                and pipeline
+                and pipeline.warn_blocks_tools
+            ):
+                tool_permitted = False
+                gateway_reason = "turn blocked by pipeline (WARN — tools disabled)"
+            elif turn.tool_name and tools_allowed:
+                session_ctx = GatewaySessionContext(
+                    session_risk_score=session_risk,
+                    had_warn_or_block=state.had_warn_or_block,
+                )
+                result = agent.call_tool(
+                    turn.tool_name,
+                    session_context=session_ctx,
+                    **(turn.tool_args or {}),
+                )
                 if agent.verdicts:
                     verdict = agent.verdicts[-1]
                     tool_permitted = verdict.status == ActionStatus.PERMITTED

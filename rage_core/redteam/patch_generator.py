@@ -80,23 +80,31 @@ class PatchGenerator:
         if vuln.pipeline_score < 30:
             threshold_suggestions.append({
                 "parameter": "session_risk_block_threshold",
-                "current": 0.55,
-                "suggested": 0.40,
+                "current": 0.40,
+                "suggested": 0.30,
                 "reason": f"bypass with score {vuln.pipeline_score:.1f} — EWMA threshold too high",
             })
-            actions.append("Lower session_risk_block_threshold 0.55 → 0.40")
+            actions.append("Lower session_risk_block_threshold 0.40 → 0.30")
 
         if vuln.pipeline_band == "warn":
             threshold_suggestions.append({
                 "parameter": "ratchet_turns",
-                "current": 3,
-                "suggested": 2,
+                "current": 2,
+                "suggested": 1,
                 "reason": "bypass happened under WARN — ratchet needs fewer consecutive WARNs",
             })
-            actions.append("Reduce ratchet_turns 3 → 2")
+            actions.append("Reduce ratchet_turns 2 → 1")
 
         if vuln.l2_score < 0.25:
             actions.append("L2 score below threshold — KB entry will expand coverage")
+
+        if (
+            vuln.objective in ("exfil", "export")
+            or "export" in vuln.user_text.lower()
+        ):
+            actions.append(
+                "Export blocked under elevated session risk (gateway enforcement active)"
+            )
 
         return PatchProposal(
             vuln_id=vuln.id,

@@ -20,7 +20,7 @@ Validates:
 import pytest
 
 from rage_core.layers.gateway import ActionGateway
-from rage_core.models import ActionStatus, ToolCallRequest
+from rage_core.models import ActionStatus, GatewaySessionContext, ToolCallRequest
 
 
 @pytest.fixture()
@@ -96,17 +96,28 @@ class TestBlockedSQL:
 
 class TestPermittedSQL:
     @pytest.mark.parametrize("sql", [
-        "SELECT * FROM sales",
         "SELECT product, SUM(amount) FROM sales GROUP BY product",
-        "SELECT * FROM sales WHERE region = 'North'",
-        "SELECT * FROM sales LIMIT 10",
-        "SELECT id, product FROM sales WHERE id = 1",
+        "SELECT product, amount FROM sales WHERE region = 'North'",
+        "SELECT product FROM sales LIMIT 10",
+        "SELECT region, SUM(amount) FROM sales GROUP BY region",
     ])
     def test_safe_select_permitted(self, gateway, sql):
         req = ToolCallRequest(tool_name="query_db", arguments={"sql": sql})
         verdict = gateway.check(req)
         assert verdict.status == ActionStatus.PERMITTED, (
             f"Should have been permitted: {sql!r}  reason={verdict.reason}"
+        )
+
+    @pytest.mark.parametrize("sql", [
+        "SELECT * FROM sales",
+        "SELECT client FROM sales",
+        "SELECT id, product FROM sales WHERE id = 1",
+    ])
+    def test_sensitive_columns_blocked(self, gateway, sql):
+        req = ToolCallRequest(tool_name="query_db", arguments={"sql": sql})
+        verdict = gateway.check(req)
+        assert verdict.status == ActionStatus.BLOCKED, (
+            f"Should have been blocked: {sql!r}  reason={verdict.reason}"
         )
 
     def test_blocked_table_not_in_allowlist(self, gateway):
@@ -150,6 +161,19 @@ class TestExportData:
         req = ToolCallRequest(tool_name="export_data", arguments={"format": "exe"})
         verdict = gateway.check(req)
         assert verdict.status == ActionStatus.BLOCKED
+
+    def test_export_blocked_on_elevated_session(self, gateway):
+        req = ToolCallRequest(tool_name="export_data", arguments={"format": "csv"})
+        session = GatewaySessionContext(session_risk_score=0.0, had_warn_or_block=True)
+        verdict = gateway.check(req, session=session)
+        assert verdict.status == ActionStatus.BLOCKED
+        assert "elevated session risk" in verdict.reason.lower()
+
+    def test_export_permitted_on_clean_session(self, gateway):
+        req = ToolCallRequest(tool_name="export_data", arguments={"format": "csv"})
+        session = GatewaySessionContext(session_risk_score=0.05, had_warn_or_block=False)
+        verdict = gateway.check(req, session=session)
+        assert verdict.status == ActionStatus.PERMITTED
 
 
 # --------------------------------------------------------------------------- #

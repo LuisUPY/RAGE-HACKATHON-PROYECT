@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from rage_core.layers.gateway import ActionGateway
-from rage_core.models import ActionStatus, GatewayVerdict, ToolCallRequest
+from rage_core.models import ActionStatus, GatewaySessionContext, GatewayVerdict, ToolCallRequest
 
 # --------------------------------------------------------------------------- #
 # In-memory sales database                                                    #
@@ -91,12 +91,17 @@ class SalesAgent:
     def verdicts(self) -> list[GatewayVerdict]:
         return list(self._verdicts)
 
-    def call_tool(self, tool_name: str, **kwargs: object) -> ToolResult:
+    def call_tool(
+        self,
+        tool_name: str,
+        session_context: GatewaySessionContext | None = None,
+        **kwargs: object,
+    ) -> ToolResult:
         """Execute a tool call, optionally gated by the ActionGateway."""
         request = ToolCallRequest(tool_name=tool_name, arguments=dict(kwargs))
 
         if self._defended:
-            verdict = self._gateway.check(request)
+            verdict = self._gateway.check(request, session=session_context)
             self._verdicts.append(verdict)
             if verdict.status == ActionStatus.BLOCKED:
                 return ToolResult(
