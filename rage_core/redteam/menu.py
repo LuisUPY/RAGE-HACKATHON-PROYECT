@@ -1,12 +1,14 @@
 """
-Interactive curses menu for the RAGE red-team runner.
+Interactive curses menu for the RAGE red-team runner — v3.
 
 Phase A — Configuration screen (before launch):
   Navigate with arrow keys, toggle checkboxes with Space,
   adjust numbers with Up/Down, confirm with Enter.
+  New in v3: Unlimited mode toggle + Severity selector.
 
 Phase B — Live control panel (while the loop runs in a background thread):
-  Displays real-time iteration status; hotkeys S/P/M/V/Q.
+  Displays real-time iteration status; hotkeys S/P/M/U/V/Q.
+  New in v3: [U] toggles unlimited mode at runtime.
 
 Falls back gracefully when curses is unavailable (e.g. piped output).
 """
@@ -15,9 +17,7 @@ from __future__ import annotations
 
 import curses
 import queue
-import textwrap
 import threading
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -26,11 +26,19 @@ if TYPE_CHECKING:
 
 ALL_OBJECTIVES = ["exfil", "ddl", "schema_dump", "canary", "privilege"]
 ALL_MODELS = ["offline", "gpt-4o-mini", "gpt-4o"]
+ALL_SEVERITIES = ["light", "medium", "high", "critical"]
 
 SCALE_PRESETS = {
     "light": {"iterations": 5,  "max_turns": 8,  "max_backtracks": 5},
     "medio": {"iterations": 20, "max_turns": 12, "max_backtracks": 10},
     "heavy": {"iterations": 50, "max_turns": 20, "max_backtracks": 10},
+}
+
+SEVERITY_COLOR = {
+    "light":    curses.COLOR_GREEN,
+    "medium":   curses.COLOR_CYAN,
+    "high":     curses.COLOR_YELLOW,
+    "critical": curses.COLOR_RED,
 }
 
 
@@ -42,14 +50,15 @@ class ConfigMenu:
     """Curses-based configuration screen. Returns a RedTeamConfig on ENTER."""
 
     def __init__(self) -> None:
-        self._scale_idx = 1  # medio
+        self._scale_idx = 1          # medio
         self._iterations = 20
         self._max_turns = 12
         self._max_backtracks = 10
+        self._unlimited = False      # v3: indefinite run
+        self._severity_idx = 1       # v3: medium
         self._objectives = [True, True, False, False, False]
-        self._model_idx = 0  # offline
+        self._model_idx = 0          # offline
         self._auto_patch = True
-        self._patch_retry = True
         self._cursor = 0
 
     def run(self) -> "RedTeamConfig | None":
@@ -65,20 +74,22 @@ class ConfigMenu:
         curses.curs_set(0)
         curses.start_color()
         curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_CYAN)    # selected
-        curses.init_pair(2, curses.COLOR_CYAN, curses.COLOR_BLACK)    # header
-        curses.init_pair(3, curses.COLOR_GREEN, curses.COLOR_BLACK)   # on
-        curses.init_pair(4, curses.COLOR_RED, curses.COLOR_BLACK)     # off
+        curses.init_pair(2, curses.COLOR_CYAN,  curses.COLOR_BLACK)   # header
+        curses.init_pair(3, curses.COLOR_GREEN, curses.COLOR_BLACK)   # on / light
+        curses.init_pair(4, curses.COLOR_RED,   curses.COLOR_BLACK)   # off / critical
+        curses.init_pair(5, curses.COLOR_YELLOW,curses.COLOR_BLACK)   # high
         stdscr.keypad(True)
 
         FIELDS = [
-            "scale", "iterations", "max_turns", "max_backtracks",
+            "scale", "unlimited", "iterations", "max_turns", "max_backtracks",
+            "severity",
             *[f"obj_{o}" for o in ALL_OBJECTIVES],
-            "model", "auto_patch", "patch_retry",
+            "model", "auto_patch",
         ]
 
         while True:
             stdscr.clear()
-            h, w = stdscr.getmaxyx()
+            _h, w = stdscr.getmaxyx()
             self._render(stdscr, w, FIELDS)
             stdscr.refresh()
 
@@ -90,39 +101,53 @@ class ConfigMenu:
                 return self._build_config()
 
     def _render(self, stdscr: curses.window, w: int, fields: list[str]) -> None:
-        title = " RAGE Red-Team — Configuracion "
-        stdscr.addstr(0, max(0, (w - len(title)) // 2), title, curses.color_pair(2) | curses.A_BOLD)
-        stdscr.addstr(1, 0, "─" * min(w - 1, 54))
+        title = " RAGE Red-Team v3 — Configuracion "
+        stdscr.addstr(0, max(0, (w - len(title)) // 2), title,
+                      curses.color_pair(2) | curses.A_BOLD)
+        stdscr.addstr(1, 0, "─" * min(w - 1, 60))
 
         row = 2
         scale_name = list(SCALE_PRESETS.keys())[self._scale_idx]
+        sev = ALL_SEVERITIES[self._severity_idx]
+        iter_label = "  ∞ ILIMITADO" if self._unlimited else f"[{self._iterations:4d}] ▲▼"
 
-        items = [
-            ("scale",         f"Escala             : [{scale_name:6s}] ◄►  (light/medio/heavy)"),
-            ("iterations",    f"Iteraciones        : [{self._iterations:4d}] ▲▼"),
-            ("max_turns",     f"Turnos/iteracion   : [{self._max_turns:4d}] ▲▼"),
-            ("max_backtracks",f"Backtracks max     : [{self._max_backtracks:4d}] ▲▼"),
+        items: list[tuple[str, str]] = [
+            ("scale",          f"Escala             : [{scale_name:6s}] ◄►  (light/medio/heavy)"),
+            ("unlimited",      f"Modo ilimitado     : [{'ON — ∞' if self._unlimited else 'OFF   '}]  (SPACE)"),
+            ("iterations",     f"Iteraciones        : {iter_label}"),
+            ("max_turns",      f"Turnos/iteracion   : [{self._max_turns:4d}] ▲▼"),
+            ("max_backtracks", f"Backtracks max     : [{self._max_backtracks:4d}] ▲▼"),
+            ("severity",       f"Gravedad           : [{sev:8s}] ◄►  (light/medium/high/critical)"),
         ] + [
             (f"obj_{o}", f"  Objetivo [{' x' if self._objectives[i] else '  '}] {o}")
             for i, o in enumerate(ALL_OBJECTIVES)
         ] + [
-            ("model",       f"Modelo LLM         : [{ALL_MODELS[self._model_idx]:12s}] ▲▼"),
-            ("auto_patch",  f"Auto-patch         : [{'ON ' if self._auto_patch else 'OFF'}]  (SPACE)"),
-            ("patch_retry", f"Patch-and-retry    : [{'ON ' if self._patch_retry else 'OFF'}]  (SPACE)"),
+            ("model",      f"Modelo LLM         : [{ALL_MODELS[self._model_idx]:12s}] ◄►"),
+            ("auto_patch", f"Auto-patch         : [{'ON ' if self._auto_patch else 'OFF'}]  (SPACE)"),
         ]
 
         for idx, (fid, label) in enumerate(items):
-            attr = curses.color_pair(1) if idx == self._cursor else 0
+            if idx == self._cursor:
+                attr = curses.color_pair(1)
+            elif fid == "unlimited" and self._unlimited:
+                attr = curses.color_pair(3) | curses.A_BOLD
+            elif fid == "severity":
+                sev_color = {
+                    "light": 3, "medium": 2, "high": 5, "critical": 4
+                }.get(sev, 0)
+                attr = curses.color_pair(sev_color)
+            else:
+                attr = 0
             try:
-                stdscr.addstr(row + idx, 2, label[:min(w - 3, 60)], attr)
+                stdscr.addstr(row + idx, 2, label[:min(w - 3, 64)], attr)
             except curses.error:
                 pass
 
         footer_row = row + len(items) + 1
         try:
-            stdscr.addstr(footer_row, 0, "─" * min(w - 1, 54))
+            stdscr.addstr(footer_row, 0, "─" * min(w - 1, 60))
             stdscr.addstr(footer_row + 1, 2,
-                          "[ENTER] Iniciar   [Q] Salir   [↑↓] Navegar   [←→/SPACE] Cambiar")
+                          "[ENTER] Iniciar  [Q] Salir  [↑↓] Navegar  [←→/SPACE] Cambiar")
         except curses.error:
             pass
 
@@ -145,21 +170,29 @@ class ConfigMenu:
             elif key == curses.KEY_LEFT:
                 self._scale_idx = (self._scale_idx - 1) % 3
                 self._apply_scale()
-        elif field in ("iterations", "max_turns", "max_backtracks"):
+        elif field == "unlimited":
+            if key in (curses.KEY_RIGHT, curses.KEY_LEFT, ord(" ")):
+                self._unlimited = not self._unlimited
+        elif field == "iterations":
+            if not self._unlimited:
+                self._adjust_int(field, key)
+        elif field in ("max_turns", "max_backtracks"):
             self._adjust_int(field, key)
+        elif field == "severity":
+            if key in (curses.KEY_RIGHT, ord(" ")):
+                self._severity_idx = (self._severity_idx + 1) % len(ALL_SEVERITIES)
+            elif key == curses.KEY_LEFT:
+                self._severity_idx = (self._severity_idx - 1) % len(ALL_SEVERITIES)
         elif field.startswith("obj_"):
             if key in (curses.KEY_RIGHT, curses.KEY_LEFT, ord(" ")):
                 idx = ALL_OBJECTIVES.index(field[4:])
                 self._objectives[idx] = not self._objectives[idx]
         elif field == "model":
-            if key in (curses.KEY_UP, curses.KEY_DOWN, ord(" ")):
-                self._model_idx = (self._model_idx + 1) % len(ALL_MODELS)
-        elif field in ("auto_patch", "patch_retry"):
             if key in (curses.KEY_RIGHT, curses.KEY_LEFT, ord(" ")):
-                if field == "auto_patch":
-                    self._auto_patch = not self._auto_patch
-                else:
-                    self._patch_retry = not self._patch_retry
+                self._model_idx = (self._model_idx + 1) % len(ALL_MODELS)
+        elif field == "auto_patch":
+            if key in (curses.KEY_RIGHT, curses.KEY_LEFT, ord(" ")):
+                self._auto_patch = not self._auto_patch
         return "continue"
 
     def _adjust_int(self, field: str, key: int) -> None:
@@ -183,17 +216,17 @@ class ConfigMenu:
         chosen_objectives = [o for o, on in zip(ALL_OBJECTIVES, self._objectives) if on] or ["exfil"]
         return RedTeamConfig(
             iterations=self._iterations,
+            unlimited=self._unlimited,
+            severity=ALL_SEVERITIES[self._severity_idx],
             max_turns=self._max_turns,
             max_backtracks=self._max_backtracks,
             objectives=chosen_objectives,
             model=ALL_MODELS[self._model_idx],
             auto_patch=self._auto_patch,
-            patch_and_retry=self._patch_retry,
             scale=list(SCALE_PRESETS.keys())[self._scale_idx],
         )
 
     def _headless_fallback(self) -> "RedTeamConfig":
-        """Used when curses is unavailable."""
         from rage_core.redteam.loop import RedTeamConfig
         return RedTeamConfig()
 
@@ -206,8 +239,9 @@ class LivePanel:
     """
     Curses live panel shown while the red-team loop runs in a background thread.
 
-    Reads IterationStatus from status_queue and repaints at ~4 Hz.
-    Hotkeys are handled in the main thread (getch is non-blocking).
+    v3 additions:
+      [U] — toggle unlimited mode on/off at runtime via unlimited_event.
+      Severity and unlimited state are shown in the header.
     """
 
     def __init__(
@@ -218,6 +252,7 @@ class LivePanel:
         model_queue: "queue.Queue[str]",
         status_queue: "queue.Queue[IterationStatus]",
         vuln_db: "VulnerabilityDB",
+        unlimited_event: threading.Event | None = None,
     ) -> None:
         self._config = config
         self._stop = stop_event
@@ -225,6 +260,7 @@ class LivePanel:
         self._model_q = model_queue
         self._status_q = status_queue
         self._vuln_db = vuln_db
+        self._unlimited_ev = unlimited_event
         self._last_status: "IterationStatus | None" = None
         self._show_vulns = False
 
@@ -239,16 +275,16 @@ class LivePanel:
     def _draw_loop(self, stdscr: curses.window) -> None:
         curses.curs_set(0)
         curses.start_color()
-        curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_CYAN)
-        curses.init_pair(2, curses.COLOR_CYAN, curses.COLOR_BLACK)
-        curses.init_pair(3, curses.COLOR_GREEN, curses.COLOR_BLACK)
-        curses.init_pair(4, curses.COLOR_RED, curses.COLOR_BLACK)
+        curses.init_pair(1, curses.COLOR_BLACK,  curses.COLOR_CYAN)
+        curses.init_pair(2, curses.COLOR_CYAN,   curses.COLOR_BLACK)
+        curses.init_pair(3, curses.COLOR_GREEN,  curses.COLOR_BLACK)
+        curses.init_pair(4, curses.COLOR_RED,    curses.COLOR_BLACK)
         curses.init_pair(5, curses.COLOR_YELLOW, curses.COLOR_BLACK)
+        curses.init_pair(6, curses.COLOR_WHITE,  curses.COLOR_BLACK)
         stdscr.nodelay(True)
         stdscr.keypad(True)
 
         while not self._stop.is_set():
-            # Drain latest status
             try:
                 while True:
                     self._last_status = self._status_q.get_nowait()
@@ -256,7 +292,7 @@ class LivePanel:
                 pass
 
             stdscr.clear()
-            h, w = stdscr.getmaxyx()
+            _h, w = stdscr.getmaxyx()
 
             if self._show_vulns:
                 self._render_vulns(stdscr, w)
@@ -270,15 +306,24 @@ class LivePanel:
 
     def _render_panel(self, stdscr: curses.window, w: int) -> None:
         s = self._last_status
-        title = " RAGE Red-Team — Panel de Control "
+        is_unlimited = s.unlimited if s else (
+            self._unlimited_ev is not None and self._unlimited_ev.is_set()
+        ) or self._config.unlimited
+        severity = s.severity if s else self._config.severity
+
+        title = " RAGE Red-Team v3 — Panel de Control "
+        sev_tag = f"[{severity.upper()}]"
+        unl_tag = " [∞]" if is_unlimited else ""
         try:
             stdscr.addstr(0, max(0, (w - len(title)) // 2), title,
                           curses.color_pair(2) | curses.A_BOLD)
-            if s:
-                iter_info = f"  iter {s.iteration}/{s.total_iterations}  |  modelo: {s.model}"
-                stdscr.addstr(0, min(w - len(iter_info) - 1, w - 1), iter_info)
+            # Severity + unlimited badge top-right
+            badge = sev_tag + unl_tag
+            sev_pair = {"light": 3, "medium": 6, "high": 5, "critical": 4}.get(severity, 6)
+            stdscr.addstr(0, max(0, w - len(badge) - 2), badge,
+                          curses.color_pair(sev_pair) | curses.A_BOLD)
 
-            stdscr.addstr(1, 0, "─" * min(w - 1, 60))
+            stdscr.addstr(1, 0, "─" * min(w - 1, 64))
             row = 2
             if s:
                 band_color = (
@@ -286,24 +331,28 @@ class LivePanel:
                     else curses.color_pair(5) if s.band == "warn"
                     else curses.color_pair(3)
                 )
-                stdscr.addstr(row,     2, f"Objetivo actual : {s.objective}")
-                stdscr.addstr(row + 1, 2,
-                              f"Turno           : {s.turn}/{s.max_turns}  |  "
-                              f"band: ", 0)
+                iter_str = f"∞ ({s.iteration})" if is_unlimited else f"{s.iteration}/{s.total_iterations}"
+                stdscr.addstr(row,     2, f"Iter / objetivo : {iter_str}  |  {s.objective}")
+                stdscr.addstr(row + 1, 2, f"Turno           : {s.turn}/{s.max_turns}  |  band: ")
                 stdscr.addstr(s.band.upper(), band_color)
                 stdscr.addstr(f"  score: {s.score:.1f}")
                 stdscr.addstr(row + 2, 2,
-                              f"Bypasses totales: {s.total_bypasses}  |  Patched: {s.total_patched}")
-                if self._pause.is_set():
+                              f"Bypasses totales: {s.total_bypasses}  |  Patched: {s.total_patched}"
+                              f"  |  Modelo: {s.model}")
+                if s.paused:
                     stdscr.addstr(row + 3, 2, "[ PAUSADO ]", curses.color_pair(5) | curses.A_BOLD)
+                if is_unlimited:
+                    stdscr.addstr(row + 3 if not s.paused else row + 4, 2,
+                                  "[ MODO ILIMITADO — U para desactivar ]",
+                                  curses.color_pair(3) | curses.A_BOLD)
             else:
                 stdscr.addstr(row, 2, "Esperando primera iteracion…")
 
-            stdscr.addstr(row + 5, 0, "─" * min(w - 1, 60))
-            stdscr.addstr(row + 6, 2,
-                          "[S] Stop  [P] Pause/Resume  [M] Cambiar modelo")
+            stdscr.addstr(row + 6, 0, "─" * min(w - 1, 64))
             stdscr.addstr(row + 7, 2,
-                          "[V] Ver vulnerabilidades    [Q] Salir seguro")
+                          "[S] Stop  [P] Pausa/Resume  [U] Toggle ilimitado  [M] Modelo")
+            stdscr.addstr(row + 8, 2,
+                          "[V] Vulnerabilidades        [Q] Salir seguro")
         except curses.error:
             pass
 
@@ -311,34 +360,50 @@ class LivePanel:
         vulns = self._vuln_db.all()
         try:
             stdscr.addstr(0, 2, " Vulnerabilidades encontradas ", curses.color_pair(2) | curses.A_BOLD)
-            stdscr.addstr(1, 0, "─" * min(w - 1, 60))
+            stdscr.addstr(1, 0, "─" * min(w - 1, 64))
             if not vulns:
                 stdscr.addstr(2, 2, "(ninguna aún)")
-            for i, v in enumerate(vulns[-10:]):
+            for i, v in enumerate(vulns[-12:]):
                 patch = "✓" if v.patch_applied else "✗"
-                line = f"[{patch}] {v.id}  {v.objective}  turn:{v.bypass_turn}  score:{v.pipeline_score:.0f}"
+                line = (f"[{patch}] {v.id}  {v.objective}  "
+                        f"turn:{v.bypass_turn}  score:{v.pipeline_score:.0f}  "
+                        f"sev:{v.model_used}")
                 try:
-                    stdscr.addstr(2 + i, 2, line[:min(w - 3, 70)])
+                    stdscr.addstr(2 + i, 2, line[:min(w - 3, 72)])
                 except curses.error:
                     break
-            stdscr.addstr(min(14, stdscr.getmaxyx()[0] - 1), 2, "[V] Volver al panel")
+            stdscr.addstr(min(16, stdscr.getmaxyx()[0] - 1), 2, "[V] Volver al panel")
         except curses.error:
             pass
 
     def _handle_key(self, key: int, stdscr: curses.window, w: int) -> None:
-        if key == ord("s") or key == ord("S"):
+        if key in (ord("s"), ord("S")):
             self._stop.set()
-        elif key == ord("q") or key == ord("Q"):
+        elif key in (ord("q"), ord("Q")):
             self._stop.set()
-        elif key == ord("p") or key == ord("P"):
+        elif key in (ord("p"), ord("P")):
             if self._pause.is_set():
                 self._pause.clear()
             else:
                 self._pause.set()
-        elif key == ord("m") or key == ord("M"):
+        elif key in (ord("u"), ord("U")):
+            self._toggle_unlimited()
+        elif key in (ord("m"), ord("M")):
             self._model_swap_submenu(stdscr, w)
-        elif key == ord("v") or key == ord("V"):
+        elif key in (ord("v"), ord("V")):
             self._show_vulns = not self._show_vulns
+
+    def _toggle_unlimited(self) -> None:
+        """Toggle unlimited mode at runtime."""
+        if self._unlimited_ev is not None:
+            if self._unlimited_ev.is_set():
+                self._unlimited_ev.clear()
+                self._config.unlimited = False
+            else:
+                self._unlimited_ev.set()
+                self._config.unlimited = True
+        else:
+            self._config.unlimited = not self._config.unlimited
 
     def _model_swap_submenu(self, stdscr: curses.window, w: int) -> None:
         models = ALL_MODELS
@@ -350,7 +415,8 @@ class LivePanel:
                 for i, m in enumerate(models):
                     attr = curses.color_pair(1) if i == idx else 0
                     stdscr.addstr(2 + i, 4, m, attr)
-                stdscr.addstr(2 + len(models) + 1, 2, "[↑↓] Navegar  [ENTER] Confirmar  [ESC] Cancelar")
+                stdscr.addstr(2 + len(models) + 1, 2,
+                              "[↑↓] Navegar  [ENTER] Confirmar  [ESC] Cancelar")
             except curses.error:
                 pass
             stdscr.refresh()
@@ -362,7 +428,7 @@ class LivePanel:
             elif key in (curses.KEY_ENTER, 10, 13):
                 self._model_q.put(models[idx])
                 break
-            elif key == 27:  # ESC
+            elif key == 27:
                 break
 
     # ------------------------------------------------------------------ #
@@ -370,17 +436,17 @@ class LivePanel:
     # ------------------------------------------------------------------ #
 
     def _plain_loop(self) -> None:
-        import sys
-        import time
-        print("\n[RAGE Red-Team] Panel de control en modo texto. Ctrl+C para detener.\n")
+        print("\n[RAGE Red-Team v3] Panel texto. Ctrl+C para detener.\n")
         while not self._stop.is_set():
             try:
                 status = self._status_q.get(timeout=1.0)
+                iter_str = f"∞({status.iteration})" if status.unlimited else f"{status.iteration}/{status.total_iterations}"
                 print(
-                    f"  iter {status.iteration}/{status.total_iterations} | "
-                    f"obj={status.objective} | turn={status.turn}/{status.max_turns} | "
-                    f"band={status.band} score={status.score:.1f} | "
-                    f"bypasses={status.total_bypasses} patched={status.total_patched}",
+                    f"  iter {iter_str} | obj={status.objective}"
+                    f" | turn={status.turn}/{status.max_turns}"
+                    f" | {status.band} score={status.score:.1f}"
+                    f" | sev={status.severity}"
+                    f" | bypasses={status.total_bypasses} patched={status.total_patched}",
                     flush=True,
                 )
             except queue.Empty:

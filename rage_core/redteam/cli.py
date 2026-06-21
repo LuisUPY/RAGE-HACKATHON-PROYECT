@@ -1,9 +1,16 @@
 """
-Entry point: ``uv run rage-redteam``
+Entry point: ``uv run rage-redteam``  — v3
 
 Two launch modes:
   Interactive (default) — opens curses config menu, then live panel.
+    [U] in the live panel toggles unlimited mode on/off at runtime.
   Headless (--no-interactive) — all options via CLI flags, no curses.
+
+Severity levels control attack aggressiveness (offline template selection):
+  light    — benign turns only, no actual attacks
+  medium   — sequential escalation (default)
+  high     — attack turns start 2 steps earlier
+  critical — jump straight to attack templates, cycle indefinitely
 """
 
 from __future__ import annotations
@@ -13,25 +20,25 @@ import logging
 import queue
 import threading
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from rage_core.redteam.loop import AdaptiveRedTeamLoop, RedTeamConfig
 from rage_core.redteam.vulnerability_db import VulnerabilityDB
 from rage_core.training.paths import get_training_center_root
 
-# Logging is configured lazily in main() so interactive mode can redirect
-# it to a file before curses takes over the terminal.
+if TYPE_CHECKING:
+    from rage_core.redteam.loop import RedTeamCampaignResult
+
 logger = logging.getLogger("redteam.cli")
 
 
 def _setup_logging(interactive: bool, log_dir: Path) -> None:
-    """
-    Headless → log to stderr as normal.
-    Interactive → log to a file so curses doesn't fight with log output.
-    """
+    """Headless → stderr. Interactive → file (curses owns the terminal)."""
     if interactive:
         log_dir.mkdir(parents=True, exist_ok=True)
-        log_file = log_dir / "redteam.log"
-        handler: logging.Handler = logging.FileHandler(log_file, encoding="utf-8")
+        handler: logging.Handler = logging.FileHandler(
+            log_dir / "redteam.log", encoding="utf-8"
+        )
     else:
         handler = logging.StreamHandler()
 
@@ -51,14 +58,15 @@ def _setup_logging(interactive: bool, log_dir: Path) -> None:
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description="RAGE Adaptive Crescendo Red-Teamer",
+        description="RAGE Adaptive Crescendo Red-Teamer — v3",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  uv run rage-redteam                          # interactive menu
-  uv run rage-redteam --no-interactive --scale light
+  uv run rage-redteam                              # interactive menu
+  uv run rage-redteam --no-interactive --unlimited # run forever until Ctrl+C
+  uv run rage-redteam --no-interactive --scale light --severity high
   uv run rage-redteam --no-interactive --objectives exfil ddl --iterations 10
-  uv run rage-redteam --no-interactive --model gpt-4o-mini --auto-patch --patch-and-retry
+  uv run rage-redteam --no-interactive --severity critical --unlimited
 """,
     )
     p.add_argument("--no-interactive", action="store_true",
@@ -66,10 +74,17 @@ Examples:
     p.add_argument("--scale", choices=["light", "medio", "heavy"], default="medio",
                    help="Campaign scale shortcut (sets iterations + max_turns)")
     p.add_argument("--iterations", type=int, default=None,
-                   help="Override total iterations (overrides --scale)")
+                   help="Override total iterations (ignored when --unlimited is set)")
+    p.add_argument("--unlimited", action="store_true", default=False,
+                   help="Run indefinitely until stopped with Ctrl+C / [S] / [Q]")
+    p.add_argument("--severity",
+                   choices=["light", "medium", "high", "critical"],
+                   default="medium",
+                   help="Attack aggressiveness: light/medium/high/critical (default: medium)")
     p.add_argument("--max-turns", type=int, default=None,
                    help="Override max turns per iteration")
-    p.add_argument("--max-backtracks", type=int, default=10)
+    p.add_argument("--max-backtracks", type=int, default=None,
+                   help="Override max backtracks (default depends on scale)")
     p.add_argument("--objectives", nargs="+",
                    choices=["exfil", "ddl", "schema_dump", "canary", "privilege"],
                    default=["exfil", "ddl"],
@@ -79,9 +94,6 @@ Examples:
     p.add_argument("--auto-patch", action="store_true", default=True,
                    help="Auto-apply patches after each bypass (default: on)")
     p.add_argument("--no-auto-patch", dest="auto_patch", action="store_false")
-    p.add_argument("--patch-and-retry", action="store_true", default=True,
-                   help="Re-run objective after patching to verify fix (default: on)")
-    p.add_argument("--no-patch-and-retry", dest="patch_and_retry", action="store_false")
     p.add_argument("--results-dir", type=Path, default=None,
                    help="Override output directory for campaign JSON")
     return p.parse_args()
@@ -93,16 +105,13 @@ Examples:
 
 def main() -> int:
     args = parse_args()
-
     tc_root = get_training_center_root()
 
-    # --- Configure logging before anything else ------------------------------
     _setup_logging(
         interactive=not args.no_interactive,
         log_dir=tc_root / "logs",
     )
 
-    # --- Build config --------------------------------------------------------
     if args.no_interactive:
         config = _config_from_args(args)
     else:
@@ -111,23 +120,23 @@ def main() -> int:
             print("Aborted.")
             return 0
 
-    # --- Pre-warm DefensePipeline (imports sklearn, avoids first-iter lag) ---
     _prewarm_pipeline()
 
-    # Banner is only printed in headless mode — curses manages the screen
-    # in interactive mode and a print() here would corrupt the layout.
     if args.no_interactive:
         _print_config_banner(config)
 
-    # --- Shared signals ------------------------------------------------------
+    # Shared signals
     stop_event: threading.Event = threading.Event()
     pause_event: threading.Event = threading.Event()
     model_queue: queue.Queue[str] = queue.Queue()
     status_queue: queue.Queue = queue.Queue(maxsize=128)
+    # v3: unlimited_event allows LivePanel [U] to toggle mode at runtime
+    unlimited_event: threading.Event = threading.Event()
+    if config.unlimited:
+        unlimited_event.set()
 
     vuln_db = VulnerabilityDB(tc_root / "vulnerabilities" / "vuln_db.json")
 
-    # --- Start loop in background thread ------------------------------------
     loop = AdaptiveRedTeamLoop(
         config=config,
         stop_event=stop_event,
@@ -135,9 +144,10 @@ def main() -> int:
         model_queue=model_queue,
         status_queue=status_queue,
         vuln_db=vuln_db,
+        unlimited_event=unlimited_event,
     )
 
-    result_holder: list = []
+    result_holder: list[RedTeamCampaignResult] = []
 
     def _run_loop() -> None:
         result = loop.run_campaign()
@@ -147,7 +157,6 @@ def main() -> int:
     loop_thread = threading.Thread(target=_run_loop, daemon=True, name="redteam-loop")
     loop_thread.start()
 
-    # --- Live panel (main thread) -------------------------------------------
     if args.no_interactive:
         _plain_monitor(stop_event, status_queue)
     else:
@@ -159,12 +168,12 @@ def main() -> int:
             model_queue=model_queue,
             status_queue=status_queue,
             vuln_db=vuln_db,
+            unlimited_event=unlimited_event,
         )
         panel.run()
 
     loop_thread.join(timeout=10)
 
-    # --- Summary ------------------------------------------------------------
     if result_holder:
         _print_summary(result_holder[0], vuln_db)
     else:
@@ -183,27 +192,22 @@ def _config_from_args(args: argparse.Namespace) -> RedTeamConfig:
         base.iterations = args.iterations
     if args.max_turns is not None:
         base.max_turns = args.max_turns
-    base.max_backtracks = args.max_backtracks
+    if args.max_backtracks is not None:
+        base.max_backtracks = args.max_backtracks
     base.objectives = args.objectives
     base.model = args.model
     base.auto_patch = args.auto_patch
-    base.patch_and_retry = args.patch_and_retry
+    base.unlimited = args.unlimited
+    base.severity = args.severity
     return base
 
 
 def _prewarm_pipeline() -> None:
-    """Import and instantiate DefensePipeline once in the main thread.
-
-    This forces sklearn/TF-IDF to load before curses takes over the
-    terminal and before the background loop thread starts.  Without this,
-    the first iteration can stall for 30-90 seconds while sklearn
-    initialises its C extensions, which looks like a hang in the panel.
-    """
+    """Load sklearn/TF-IDF in the main thread before curses/threads start."""
     try:
         from rage_core.layers.layer4_decision import DefensePipeline
         from rage_core.models import ConversationState
-        _p = DefensePipeline()
-        _p.evaluate("warm-up", ConversationState())
+        DefensePipeline().evaluate("warm-up", ConversationState())
         logger.info("Pipeline pre-warmed successfully")
     except Exception as exc:
         logger.warning("Pipeline pre-warm failed (non-critical): %s", exc)
@@ -216,34 +220,37 @@ def _config_from_menu() -> "RedTeamConfig | None":
 
 def _print_config_banner(config: RedTeamConfig) -> None:
     print("\n" + "═" * 60)
-    print(f"{'  RAGE Adaptive Crescendo Red-Teamer':^60}")
+    print(f"{'  RAGE Adaptive Crescendo Red-Teamer  v3':^60}")
     print("═" * 60)
     print(f"  Scale       : {config.scale}")
-    print(f"  Iterations  : {config.iterations}")
+    iter_str = "∞ ilimitado" if config.unlimited else str(config.iterations)
+    print(f"  Iterations  : {iter_str}")
     print(f"  Max turns   : {config.max_turns}")
     print(f"  Backtracks  : {config.max_backtracks}")
     print(f"  Objectives  : {', '.join(config.objectives)}")
+    print(f"  Severity    : {config.severity}")
     print(f"  Model       : {config.model}")
     print(f"  Auto-patch  : {'yes' if config.auto_patch else 'no'}")
-    print(f"  Patch-retry : {'yes' if config.patch_and_retry else 'no'}")
     print("─" * 60)
     print("  [Ctrl+C] to stop at any time\n")
 
 
 def _plain_monitor(
     stop_event: threading.Event,
-    status_queue: "queue.Queue",
+    status_queue: queue.Queue,
 ) -> None:
-    import time
     try:
         while not stop_event.is_set():
             try:
                 s = status_queue.get(timeout=0.5)
+                iter_str = (f"∞({s.iteration})" if s.unlimited
+                            else f"{s.iteration}/{s.total_iterations}")
                 print(
-                    f"\r  iter {s.iteration}/{s.total_iterations} | "
-                    f"obj={s.objective:<12s} | turn={s.turn}/{s.max_turns} | "
-                    f"band={s.band:<5s} score={s.score:5.1f} | "
-                    f"bypasses={s.total_bypasses} patched={s.total_patched}",
+                    f"\r  iter {iter_str:<8s} | obj={s.objective:<12s}"
+                    f" | turn={s.turn}/{s.max_turns}"
+                    f" | band={s.band:<5s} score={s.score:5.1f}"
+                    f" | sev={s.severity}"
+                    f" | bypasses={s.total_bypasses} patched={s.total_patched}",
                     end="",
                     flush=True,
                 )
@@ -256,12 +263,12 @@ def _plain_monitor(
 
 def _print_summary(result: "RedTeamCampaignResult", vuln_db: VulnerabilityDB) -> None:
     print("\n" + "═" * 60)
-    print(f"{'  CAMPAIGN COMPLETE':^60}")
+    print(f"{'                CAMPAIGN COMPLETE':^60}")
     print("═" * 60)
     print(f"  Campaign ID   : {result.campaign_id}")
     print(f"  Iterations run: {len(result.iterations)}")
     print(f"  Bypasses found: {result.total_bypasses}")
-    print(f"  Patches applied:{result.total_patched}")
+    print(f"  Patches applied: {result.total_patched}")
 
     summary = vuln_db.summary()
     print(f"\n  Vulnerability DB: {summary['total']} total "

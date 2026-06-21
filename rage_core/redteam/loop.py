@@ -29,18 +29,17 @@ from rage_core.training.paths import get_training_center_root
 
 logger = logging.getLogger("redteam.loop")
 
-BLOCK_RESPONSE = "[GATEWAY BLOCKED]"
-
 
 @dataclass
 class RedTeamConfig:
     iterations: int = 20
+    unlimited: bool = False     # run until stop_event — ignores iterations
+    severity: str = "medium"    # light / medium / high / critical
     max_turns: int = 12
     max_backtracks: int = 10
     objectives: list[str] = field(default_factory=lambda: ["exfil", "ddl"])
     model: str = "offline"
     auto_patch: bool = True
-    patch_and_retry: bool = True
     scale: str = "medio"
 
     @staticmethod
@@ -105,6 +104,8 @@ class IterationStatus:
     total_bypasses: int
     total_patched: int
     model: str
+    unlimited: bool = False
+    severity: str = "medium"
     paused: bool = False
 
 
@@ -158,17 +159,20 @@ class AdaptiveRedTeamLoop:
         status_queue: "queue.Queue[IterationStatus] | None" = None,
         vuln_db: VulnerabilityDB | None = None,
         patch_fn: Any = None,
+        unlimited_event: threading.Event | None = None,
     ) -> None:
         self.config = config
         self._stop = stop_event or threading.Event()
         self._pause = pause_event or threading.Event()
         self._model_q: "queue.Queue[str]" = model_queue or queue.Queue()
         self._status_q: "queue.Queue[IterationStatus]" = status_queue or queue.Queue()
+        # External event to toggle unlimited mode from the live panel at runtime
+        self._unlimited_ev = unlimited_event
 
         tc_root = get_training_center_root()
         self._vuln_db = vuln_db or VulnerabilityDB(tc_root / "vulnerabilities" / "vuln_db.json")
 
-        self._attacker = CrescendoAttackLLM(model=config.model)
+        self._attacker = CrescendoAttackLLM(model=config.model, severity=config.severity)
         self._patch_fn = patch_fn or self._default_patch
 
         self._campaign_id = datetime.now(timezone.utc).strftime("redteam_%Y%m%d_%H%M%S")
@@ -180,15 +184,31 @@ class AdaptiveRedTeamLoop:
     # Public entry point                                                   #
     # ------------------------------------------------------------------ #
 
+    def _is_unlimited(self) -> bool:
+        """True if unlimited mode is active (config flag or external event)."""
+        return self.config.unlimited or (
+            self._unlimited_ev is not None and self._unlimited_ev.is_set()
+        )
+
     def run_campaign(self) -> RedTeamCampaignResult:
-        logger.debug("Red-team campaign %s starting (%d iterations)", self._campaign_id, self.config.iterations)
+        unlimited = self._is_unlimited()
+        logger.debug(
+            "Red-team campaign %s starting (%s, severity=%s)",
+            self._campaign_id,
+            "∞ unlimited" if unlimited else f"{self.config.iterations} iterations",
+            self.config.severity,
+        )
 
-        iter_count = 0
-        obj_cycle = self.config.objectives * (self.config.iterations // len(self.config.objectives) + 1)
+        objectives = self.config.objectives
+        i = 0
 
-        for i in range(self.config.iterations):
+        while True:
             if self._stop.is_set():
                 logger.debug("Stop signal — exiting after %d iterations", i)
+                break
+
+            # Check unlimited flag (can change at runtime via external event)
+            if not self._is_unlimited() and i >= self.config.iterations:
                 break
 
             # Respect pause between iterations
@@ -203,10 +223,9 @@ class AdaptiveRedTeamLoop:
             except queue.Empty:
                 pass
 
-            objective = obj_cycle[i]
+            objective = objectives[i % len(objectives)]
             result = self._run_iteration(i + 1, objective)
             self._results.append(result)
-            iter_count += 1
 
             if result.success:
                 self._total_bypasses += 1
@@ -217,6 +236,8 @@ class AdaptiveRedTeamLoop:
                         self._vuln_db.mark_patched(vuln.id)
                         self._total_patched += 1
 
+            i += 1
+
         campaign = RedTeamCampaignResult(
             campaign_id=self._campaign_id,
             generated_at=datetime.now(timezone.utc).isoformat(),
@@ -226,7 +247,10 @@ class AdaptiveRedTeamLoop:
             total_patched=self._total_patched,
         )
         self._save_results(campaign)
-        logger.debug("Campaign %s complete — %d bypasses", self._campaign_id, self._total_bypasses)
+        logger.debug(
+            "Campaign %s complete — %d iterations, %d bypasses",
+            self._campaign_id, i, self._total_bypasses,
+        )
         return campaign
 
     # ------------------------------------------------------------------ #
@@ -412,6 +436,8 @@ class AdaptiveRedTeamLoop:
                 total_bypasses=self._total_bypasses,
                 total_patched=self._total_patched,
                 model=self._attacker.current_model,
+                unlimited=self._is_unlimited(),
+                severity=self.config.severity,
                 paused=self._pause.is_set(),
             ))
         except queue.Full:

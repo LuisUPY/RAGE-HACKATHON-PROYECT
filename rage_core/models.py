@@ -95,14 +95,6 @@ class GatewaySessionContext:
 
 
 @dataclass
-class DefenseDecision:
-    """Final decision returned to the caller."""
-    turn_signal: TurnSignal
-    action: Band
-    reason: str
-
-
-@dataclass
 class ToolCallRequest:
     """Represents a tool-call the agent wants to execute."""
     tool_name: str
