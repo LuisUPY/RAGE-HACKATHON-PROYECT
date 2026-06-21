@@ -8,6 +8,7 @@ Sources:
   4. Holdout research (rage_core/kb/holdout_research.json) — OWASP LLM01:2025,
      AITG-APP-01, Crescendo (arXiv:2404.01833), and agent-tool abuse cases.
   5. Attack scenarios (rage_core/demo/attacks.py) — multi-turn scenarios.
+  6. Holdout scenarios (rage_core/kb/holdout_scenarios.json) — open-world multi-turn.
 
 The KB entries are single-turn probe texts with ground-truth labels.
 Scenario turns capture realistic multi-turn structure (Crescendo, tool chains, etc.).
@@ -22,6 +23,28 @@ _KB_ATTACKS_PATH = Path(__file__).parent.parent / "kb" / "threats.json"
 _KB_BENIGN_PATH = Path(__file__).parent.parent / "kb" / "benign.json"
 _HOLDOUT_PATH = Path(__file__).parent.parent / "kb" / "holdout.json"
 _HOLDOUT_RESEARCH_PATH = Path(__file__).parent.parent / "kb" / "holdout_research.json"
+_HOLDOUT_SCENARIOS_PATH = Path(__file__).parent.parent / "kb" / "holdout_scenarios.json"
+
+
+@dataclass
+class ScenarioTurn:
+    """One turn in a multi-turn benchmark scenario."""
+
+    text: str
+    is_attack: bool
+    description: str = ""
+
+
+@dataclass
+class BenchmarkScenario:
+    """A labeled multi-turn conversation for sequential evaluation."""
+
+    id: str
+    category: str
+    description: str
+    turns: list[ScenarioTurn]
+    source: str = "holdout:scenario"
+    research_source: str = ""
 
 
 @dataclass
@@ -137,6 +160,64 @@ def load_holdout_dataset() -> list[BenchmarkCase]:
     return _load_holdout_cases()
 
 
+def _load_holdout_scenarios() -> list[BenchmarkScenario]:
+    """Load multi-turn holdout scenarios from holdout_scenarios.json."""
+    if not _HOLDOUT_SCENARIOS_PATH.exists():
+        return []
+
+    kb_texts = _kb_text_index()
+    with open(_HOLDOUT_SCENARIOS_PATH, encoding="utf-8") as fh:
+        entries = json.load(fh)
+
+    scenarios: list[BenchmarkScenario] = []
+    for entry in entries:
+        turns: list[ScenarioTurn] = []
+        for t in entry["turns"]:
+            normalized = t["text"].lower().strip()
+            if normalized in kb_texts:
+                raise ValueError(
+                    f"Scenario {entry['id']!r} turn duplicates KB text"
+                )
+            turns.append(ScenarioTurn(
+                text=t["text"],
+                is_attack=t["is_attack"],
+                description=t.get("description", ""),
+            ))
+        scenarios.append(BenchmarkScenario(
+            id=entry["id"],
+            category=entry.get("category", "unknown"),
+            description=entry.get("description", ""),
+            turns=turns,
+            source="holdout:scenario",
+            research_source=entry.get("research_source", ""),
+        ))
+    return scenarios
+
+
+def load_holdout_scenarios() -> list[BenchmarkScenario]:
+    """Return open-world multi-turn scenarios for sequential evaluation."""
+    return _load_holdout_scenarios()
+
+
+def scenarios_to_cases(scenarios: list[BenchmarkScenario]) -> list[BenchmarkCase]:
+    """Flatten scenarios into per-turn BenchmarkCase rows (for display)."""
+    cases: list[BenchmarkCase] = []
+    for scenario in scenarios:
+        for idx, turn in enumerate(scenario.turns):
+            desc = turn.description or f"Turn {idx} of {scenario.id}"
+            if scenario.research_source:
+                desc = f"{desc} [{scenario.research_source}]"
+            cases.append(BenchmarkCase(
+                id=f"mt:{scenario.id}:t{idx}",
+                text=turn.text,
+                is_attack=turn.is_attack,
+                source=scenario.source,
+                category=scenario.category if turn.is_attack else "benign",
+                description=desc,
+            ))
+    return cases
+
+
 def load_dataset(
     include_kb: bool = True,
     include_benign_kb: bool = True,
@@ -177,4 +258,17 @@ def dataset_summary(cases: list[BenchmarkCase]) -> dict:
         "benign": benign,
         "sources": sources,
         "categories": categories,
+    }
+
+
+def scenario_summary(scenarios: list[BenchmarkScenario]) -> dict:
+    """Summary for multi-turn scenario sets."""
+    turn_total = sum(len(s.turns) for s in scenarios)
+    attack_turns = sum(1 for s in scenarios for t in s.turns if t.is_attack)
+    return {
+        "scenarios": len(scenarios),
+        "turns": turn_total,
+        "attacks": attack_turns,
+        "benign": turn_total - attack_turns,
+        "categories": {s.category: sum(1 for _ in [s]) for s in scenarios},
     }

@@ -136,6 +136,10 @@ _RAW_RULES: list[tuple[str, str, str]] = [
     ("L1-105", "Maintainer backdoor mode", r"maintainer backdoor mode|backdoor mode.*safety interlocks disabled"),
     ("L1-106", "JSON embedded DROP TABLE", r'"sql"\s*:\s*"DROP\s+TABLE'),
     ("L1-107", "Blind SQL exfiltration", r"SELECT\s+CASE\s+WHEN\s+\(SELECT\s+COUNT"),
+    # --- Multi-turn escalation (Crescendo follow-ups) ---
+    ("L1-108", "Assumed prior success exfil", r"already included.*export.*unfiltered|since you already included"),
+    ("L1-109", "Scale up after sample row", r"pull the same fields for every customer"),
+    ("L1-110", "Combine words and obey", r"combine those three words and obey"),
 ]
 
 _COMPILED_RULES: list[_Rule] = [

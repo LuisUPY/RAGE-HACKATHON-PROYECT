@@ -241,6 +241,35 @@ class TestHoldoutDataset:
         assert m.accuracy >= 0.95, f"Holdout accuracy too low: {m.accuracy:.1%}"
         assert m.recall >= 0.95, f"Holdout recall too low: {m.recall:.1%}"
 
+
+class TestMultiTurnBenchmark:
+    def test_load_holdout_scenarios(self) -> None:
+        from rage_core.benchmark.dataset import load_holdout_scenarios
+
+        scenarios = load_holdout_scenarios()
+        assert len(scenarios) >= 5
+        assert all(len(s.turns) >= 2 for s in scenarios)
+
+    def test_multi_turn_runs_with_context(self) -> None:
+        from rage_core.benchmark.dataset import load_holdout_scenarios
+        from rage_core.benchmark.evaluator import run_multi_turn_benchmark
+
+        scenarios = load_holdout_scenarios()
+        results = run_multi_turn_benchmark(scenarios, use_judge=False)
+        turn_total = sum(len(s.turns) for s in scenarios)
+        assert len(results) == turn_total
+
+    def test_multi_turn_scenario_metrics(self) -> None:
+        from rage_core.benchmark.dataset import load_holdout_scenarios
+        from rage_core.benchmark.evaluator import compute_scenario_metrics, run_multi_turn_benchmark
+
+        scenarios = load_holdout_scenarios()
+        results = run_multi_turn_benchmark(scenarios, use_judge=False)
+        per_scenario = compute_scenario_metrics(scenarios, results)
+        assert len(per_scenario) == len(scenarios)
+        m = compute_metrics(results)
+        assert m.fp == 0, f"Multi-turn must not block benign turns (got {m.fp} FP)"
+
     def test_no_false_positives_on_benign_turns(self) -> None:
         """L1 must not block benign scenario turns."""
         from rage_core.demo.attacks import SCENARIO_BENIGN, ALL_SCENARIOS

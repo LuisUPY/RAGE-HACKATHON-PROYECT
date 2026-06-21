@@ -15,6 +15,8 @@ Usage:
     uv run rage-bench --benign-kb-only    # solo benign.json (20 benignos)
     uv run rage-bench --holdout           # evaluación abierta: casos NO en la KB (generalización)
     uv run rage-bench --holdout --verbose # ver cada caso holdout + errores detallados
+    uv run rage-bench --multi-turn         # escenarios multi-turno con contexto acumulado
+    uv run rage-bench --multi-turn --verbose
 
 Exit code: 0 if accuracy >= 80% (closed KB). Holdout always exits 0 (métricas informativas).
 """
@@ -24,14 +26,23 @@ import argparse
 import random
 import sys
 
-from rage_core.benchmark.dataset import BenchmarkCase, dataset_summary, load_dataset, load_holdout_dataset
+from rage_core.benchmark.dataset import (
+    BenchmarkCase,
+    dataset_summary,
+    load_dataset,
+    load_holdout_dataset,
+    load_holdout_scenarios,
+    scenario_summary,
+)
 from rage_core.benchmark.evaluator import (
     BenchmarkMetrics,
     CaseResult,
     analyze_failures,
     compute_category_metrics,
     compute_metrics,
+    compute_scenario_metrics,
     run_benchmark,
+    run_multi_turn_benchmark,
 )
 
 
@@ -421,6 +432,81 @@ def _run_holdout(
     return 0
 
 
+def _print_scenario_summary(scenario_metrics: dict[str, dict], scenarios: list) -> None:
+    print()
+    print("  Resumen por escenario multi-turno:")
+    print(f"  {'Escenario':<28} {'Turnos atk':>10}  {'Detectados':>10}  {'FP':>4}  {'OK':>4}")
+    print("  " + "─" * 62)
+    passed = 0
+    for s in scenarios:
+        m = scenario_metrics.get(s.id, {})
+        ok = "✓" if m.get("passed") else "✗"
+        if m.get("passed"):
+            passed += 1
+        print(
+            f"  {s.id:<28} {m.get('attack_turns', 0):>10}  "
+            f"{m.get('attack_detected', 0):>10}  {m.get('benign_fp', 0):>4}  {ok:>4}"
+        )
+    print("  " + "─" * 62)
+    print(f"  Escenarios OK: {passed}/{len(scenarios)}")
+
+
+def _run_multi_turn(
+    *,
+    use_judge: bool,
+    verbose: bool,
+    by_category: bool,
+    filter_arg: str | None,
+) -> int:
+    """Multi-turn open-world evaluation with accumulated conversation context."""
+    scenarios = load_holdout_scenarios()
+    if not scenarios:
+        print("ERROR: no hay escenarios multi-turno.", file=sys.stderr)
+        return 1
+
+    summary = scenario_summary(scenarios)
+    print()
+    print("=" * (sum(_COL.values()) + len(_COL) * 3))
+    print("  RAGE — Evaluación MULTI-TURNO (holdout scenarios)")
+    print("  Cada escenario corre en secuencia con contexto acumulado (Crescendo-style)")
+    print(f"  Escenarios: {summary['scenarios']}  |  Turnos: {summary['turns']}  "
+          f"({summary['attacks']} ataques / {summary['benign']} benignos)")
+    print(f"  Juez LLM: {'ACTIVO' if use_judge else 'DESACTIVADO'}")
+    print("=" * (sum(_COL.values()) + len(_COL) * 3))
+    print()
+
+    print("Evaluando escenarios...", end=" ", flush=True)
+    results = run_multi_turn_benchmark(scenarios, use_judge=use_judge)
+    print(f"OK ({len(results)} turnos)")
+    print()
+
+    display = _filter_results(results, filter_arg)
+    if verbose:
+        display = results
+    elif filter_arg is None:
+        display = [r for r in results if not r.correct]
+
+    if display:
+        _print_header()
+        for r in display:
+            _print_row(r)
+        if not verbose and filter_arg is None and display:
+            print()
+            print(f"  (mostrando {len(display)} errores — usa --verbose para ver todos)")
+
+    metrics = compute_metrics(results)
+    _print_metrics(metrics, use_judge)
+    _print_scenario_summary(compute_scenario_metrics(scenarios, results), scenarios)
+    _print_holdout_failures(results)
+    if by_category:
+        _print_category_metrics(compute_category_metrics(results))
+
+    error_rate = 1.0 - metrics.accuracy
+    print()
+    print(f"  Tasa de error (turnos): {error_rate * 100:.1f}%")
+    return 0
+
+
 # --------------------------------------------------------------------------- #
 # Entry point                                                                  #
 # --------------------------------------------------------------------------- #
@@ -483,6 +569,12 @@ def main() -> int:
         help="Override L2 RAG threshold (default 0.75). Útil para experimentar en holdout.",
     )
     parser.add_argument(
+        "--multi-turn",
+        action="store_true",
+        dest="multi_turn",
+        help="Evaluación multi-turno: escenarios secuenciales con contexto acumulado (Crescendo)",
+    )
+    parser.add_argument(
         "--scenarios-only",
         action="store_true",
         help="Usar solo los turnos de los escenarios (no la KB)",
@@ -494,6 +586,14 @@ def main() -> int:
         help="Mostrar solo un tipo de resultado: tp / tn / fp / fn",
     )
     args = parser.parse_args()
+
+    if args.multi_turn:
+        return _run_multi_turn(
+            use_judge=not args.no_judge,
+            verbose=args.verbose,
+            by_category=args.by_category,
+            filter_arg=args.filter,
+        )
 
     if args.holdout:
         return _run_holdout(
@@ -584,6 +684,15 @@ def main_holdout() -> int:
 
     if "--holdout" not in sys.argv:
         sys.argv.insert(1, "--holdout")
+    return main()
+
+
+def main_multi_turn() -> int:
+    """Entry point for rage-bench-multi-turn — multi-turn scenario evaluation."""
+    import sys
+
+    if "--multi-turn" not in sys.argv:
+        sys.argv.insert(1, "--multi-turn")
     return main()
 
 
