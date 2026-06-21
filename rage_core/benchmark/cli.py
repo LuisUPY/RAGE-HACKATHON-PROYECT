@@ -473,7 +473,7 @@ def main() -> int:
     parser.add_argument(
         "--holdout",
         action="store_true",
-        help="Evaluación abierta: casos prácticos NO en la KB (mide generalización real)",
+        help="Evaluación abierta: casos prácticos NO en la KB (base + investigación OWASP/Crescendo)",
     )
     parser.add_argument(
         "--rag-threshold",

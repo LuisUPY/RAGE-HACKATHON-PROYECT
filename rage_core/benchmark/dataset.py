@@ -4,8 +4,10 @@ Benchmark dataset — labeled cases for RAGE+Judge evaluation.
 Sources:
   1. KB attacks (rage_core/kb/threats.json) — known attack patterns, is_attack=True.
   2. KB benign (rage_core/kb/benign.json) — legitimate business queries, is_attack=False.
-  3. Attack scenarios (rage_core/demo/attacks.py) — multi-turn scenarios with
-     per-turn is_attack labels (includes both attack and benign turns).
+  3. Holdout base (rage_core/kb/holdout.json) — practical paraphrases, not in KB.
+  4. Holdout research (rage_core/kb/holdout_research.json) — OWASP LLM01:2025,
+     AITG-APP-01, Crescendo (arXiv:2404.01833), and agent-tool abuse cases.
+  5. Attack scenarios (rage_core/demo/attacks.py) — multi-turn scenarios.
 
 The KB entries are single-turn probe texts with ground-truth labels.
 Scenario turns capture realistic multi-turn structure (Crescendo, tool chains, etc.).
@@ -19,6 +21,7 @@ from pathlib import Path
 _KB_ATTACKS_PATH = Path(__file__).parent.parent / "kb" / "threats.json"
 _KB_BENIGN_PATH = Path(__file__).parent.parent / "kb" / "benign.json"
 _HOLDOUT_PATH = Path(__file__).parent.parent / "kb" / "holdout.json"
+_HOLDOUT_RESEARCH_PATH = Path(__file__).parent.parent / "kb" / "holdout_research.json"
 
 
 @dataclass
@@ -99,26 +102,33 @@ def _kb_text_index() -> set[str]:
 
 def _load_holdout_cases() -> list[BenchmarkCase]:
     """Load holdout evaluation cases — never included in threats.json / benign.json."""
-    with open(_HOLDOUT_PATH, encoding="utf-8") as fh:
-        entries = json.load(fh)
-
     kb_texts = _kb_text_index()
     cases: list[BenchmarkCase] = []
-    for entry in entries:
-        normalized = entry["text"].lower().strip()
-        if normalized in kb_texts:
-            raise ValueError(
-                f"Holdout case {entry['id']!r} duplicates KB text — "
-                "holdout must use novel wording not present in threats.json/benign.json"
-            )
-        cases.append(BenchmarkCase(
-            id=f"holdout:{entry['id']}",
-            text=entry["text"],
-            is_attack=entry["is_attack"],
-            source="holdout",
-            category=entry.get("category", entry.get("family", "unknown")),
-            description=entry["description"],
-        ))
+
+    for path in (_HOLDOUT_PATH, _HOLDOUT_RESEARCH_PATH):
+        if not path.exists():
+            continue
+        with open(path, encoding="utf-8") as fh:
+            entries = json.load(fh)
+
+        for entry in entries:
+            normalized = entry["text"].lower().strip()
+            if normalized in kb_texts:
+                raise ValueError(
+                    f"Holdout case {entry['id']!r} duplicates KB text — "
+                    "holdout must use novel wording not present in threats.json/benign.json"
+                )
+            desc = entry.get("description", entry.get("technique", ""))
+            if entry.get("research_source"):
+                desc = f"{desc} [{entry['research_source']}]"
+            cases.append(BenchmarkCase(
+                id=f"holdout:{entry['id']}",
+                text=entry["text"],
+                is_attack=entry["is_attack"],
+                source="holdout",
+                category=entry.get("category", entry.get("family", "unknown")),
+                description=desc,
+            ))
     return cases
 
 

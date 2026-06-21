@@ -198,7 +198,7 @@ class TestHoldoutDataset:
         from rage_core.benchmark.dataset import load_holdout_dataset
 
         cases = load_holdout_dataset()
-        assert len(cases) >= 50
+        assert len(cases) >= 100, "Holdout should include base + research cases"
         assert all(c.source == "holdout" for c in cases)
 
     def test_holdout_has_both_labels(self) -> None:
@@ -238,7 +238,8 @@ class TestHoldoutDataset:
         results = run_benchmark(load_holdout_dataset(), use_judge=False)
         m = compute_metrics(results)
         assert m.fp == 0, f"Holdout must not block benign cases (got {m.fp} FP)"
-        assert m.accuracy >= 0.90, f"Holdout accuracy too low: {m.accuracy:.1%}"
+        assert m.accuracy >= 0.95, f"Holdout accuracy too low: {m.accuracy:.1%}"
+        assert m.recall >= 0.95, f"Holdout recall too low: {m.recall:.1%}"
 
     def test_no_false_positives_on_benign_turns(self) -> None:
         """L1 must not block benign scenario turns."""
