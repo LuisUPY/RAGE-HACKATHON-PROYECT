@@ -1,1 +1,6 @@
 metrics.json
+__pycache__/
+*.pyc
+Training-Center/results/*.json
+Training-Center/insights/pending_hardening_*.json
+Training-Center/insights/applied/
