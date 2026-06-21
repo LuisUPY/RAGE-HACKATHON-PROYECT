@@ -102,6 +102,8 @@ uv run python -m rage_core.training.apply
 
 See [Training-Center/README.md](Training-Center/README.md) for ASR metrics and KB hardening loop.
 
+**Manual completo (PDF):** [Manuales/training-center-manual.pdf](Manuales/training-center-manual.pdf) — guía en español de `rage-training`, `rage-redteam` v3 y flujos de trabajo.
+
 ### Lint
 
 ```bash
