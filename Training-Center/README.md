@@ -24,7 +24,7 @@ uv run rage-training
 | `Resolved 2 packages` | No estás en el repo completo | `cd` a la carpeta que contiene `rage_core/` |
 | `No module named 'rage_core'` | No corriste `uv sync` o carpeta incorrecta | Desde raíz: `uv sync` luego `uv run rage-training` |
 
-## Comandos
+## Comandos Training-Center
 
 ```bash
 uv run rage-training
@@ -32,6 +32,43 @@ uv run rage-training --scenarios crescendo_escalation
 uv run rage-training-apply
 uv run rage-training-apply --apply-kb
 ```
+
+## Adaptive Red-Teamer (rage-redteam)
+
+```bash
+# Modo interactivo (menu curses: configurar escala, objetivos, modelo)
+uv run rage-redteam
+
+# Modo headless
+uv run rage-redteam --no-interactive --scale light
+uv run rage-redteam --no-interactive --objectives exfil ddl --iterations 20 --auto-patch
+uv run rage-redteam --no-interactive --model gpt-4o-mini --scale heavy --auto-patch
+```
+
+### Escalas predefinidas
+
+| Escala | Iteraciones | Turnos/iter |
+|--------|-------------|-------------|
+| `light` | 5 | 8 |
+| `medio` | 20 | 12 |
+| `heavy` | 50 | 20 |
+
+### Teclas durante la ejecucion (modo interactivo)
+
+| Tecla | Accion |
+|-------|--------|
+| `S` / `Q` | Stop limpio |
+| `P` | Pause / Resume entre iteraciones |
+| `M` | Cambiar modelo LLM en caliente |
+| `V` | Ver tabla de vulnerabilidades |
+
+### Outputs
+
+| Archivo | Contenido |
+|---------|-----------|
+| `Training-Center/results/redteam_*.json` | Telemetria completa |
+| `Training-Center/vulnerabilities/vuln_db.json` | Vulnerabilidades encontradas |
+| `rage_core/kb/threats.json` | KB enriquecido por patches |
 
 Alternativa:
 

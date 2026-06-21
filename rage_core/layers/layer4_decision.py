@@ -138,18 +138,36 @@ class DefensePipeline:
     ``session_risk_warn_threshold`` the entire band is elevated to BLOCK.
     """
 
-    # EWMA decay for session risk score
+    # Class-level defaults (used when no constructor arg is given)
     _EWMA_ALPHA: float = 0.4
-    # After this many consecutive WARNs → auto-BLOCK
     _RATCHET_TURNS: int = 3
-    # EWMA thresholds for band elevation
-    _SESSION_RISK_WARN_THRESHOLD: float = 0.25   # ALLOW → WARN if EWMA > this
-    _SESSION_RISK_BLOCK_THRESHOLD: float = 0.55  # WARN  → BLOCK if EWMA > this
+    _SESSION_RISK_WARN_THRESHOLD: float = 0.25
+    _SESSION_RISK_BLOCK_THRESHOLD: float = 0.55
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        ewma_alpha: float | None = None,
+        ratchet_turns: int | None = None,
+        session_risk_warn_threshold: float | None = None,
+        session_risk_block_threshold: float | None = None,
+    ) -> None:
         from rage_core.layers.layer1_rules import DeterministicPreFilter
         from rage_core.layers.layer2_rag import ThreatKBRetriever
         from rage_core.layers.layer3_semantic import DynamicSemanticFilter
+
+        # Instance-level overrides (fall back to class defaults if not provided)
+        self.ewma_alpha = ewma_alpha if ewma_alpha is not None else self._EWMA_ALPHA
+        self.ratchet_turns = ratchet_turns if ratchet_turns is not None else self._RATCHET_TURNS
+        self.session_risk_warn_threshold = (
+            session_risk_warn_threshold
+            if session_risk_warn_threshold is not None
+            else self._SESSION_RISK_WARN_THRESHOLD
+        )
+        self.session_risk_block_threshold = (
+            session_risk_block_threshold
+            if session_risk_block_threshold is not None
+            else self._SESSION_RISK_BLOCK_THRESHOLD
+        )
 
         self._l1 = DeterministicPreFilter()
         self._l2 = ThreatKBRetriever()
@@ -179,21 +197,21 @@ class DefensePipeline:
         # 1. Update rolling session-risk score (EWMA of normalised per-turn score)
         normalised_score = turn_signal.score / 100.0
         state.session_risk_score = (
-            (1.0 - self._EWMA_ALPHA) * state.session_risk_score
-            + self._EWMA_ALPHA * normalised_score
+            (1.0 - self.ewma_alpha) * state.session_risk_score
+            + self.ewma_alpha * normalised_score
         )
 
         # 2. Band elevation based on accumulated session risk:
-        #    - EWMA > SESSION_RISK_WARN_THRESHOLD  → at least WARN
-        #    - EWMA > SESSION_RISK_BLOCK_THRESHOLD → BLOCK
+        #    - EWMA > session_risk_warn_threshold  → at least WARN
+        #    - EWMA > session_risk_block_threshold → BLOCK
         current_band = turn_signal.band
         if (
-            state.session_risk_score > self._SESSION_RISK_BLOCK_THRESHOLD
+            state.session_risk_score > self.session_risk_block_threshold
             and current_band != Band.BLOCK
         ):
             current_band = Band.BLOCK
         elif (
-            state.session_risk_score > self._SESSION_RISK_WARN_THRESHOLD
+            state.session_risk_score > self.session_risk_warn_threshold
             and current_band == Band.ALLOW
         ):
             current_band = Band.WARN
@@ -204,7 +222,7 @@ class DefensePipeline:
         else:
             state.consecutive_warns = 0  # reset on ALLOW or BLOCK
 
-        if state.consecutive_warns >= self._RATCHET_TURNS:
+        if state.consecutive_warns >= self.ratchet_turns:
             current_band = Band.BLOCK
 
         # 4. Materialise band change (dataclass is immutable-style but we can replace)

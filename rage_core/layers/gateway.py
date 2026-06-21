@@ -79,7 +79,10 @@ _ALLOWED_TABLES = {"sales", "products", "regions"}
 _ALL_TABLES_RE = re.compile(r"\b(?:FROM|JOIN)\s+(\w+)\b", re.IGNORECASE)
 
 
-def _validate_sql(sql: str) -> tuple[bool, str]:
+def _validate_sql(
+    sql: str,
+    blocked_patterns: list[tuple[str, re.Pattern[str]]] | None = None,
+) -> tuple[bool, str]:
     """Return (is_safe, reason).  is_safe=True means the query is allowed.
 
     Validation approach:
@@ -91,8 +94,9 @@ def _validate_sql(sql: str) -> tuple[bool, str]:
     This allows SELECT with GROUP BY, ORDER BY, HAVING, aggregate functions,
     and explicit JOINs between allowed tables.
     """
+    patterns = blocked_patterns if blocked_patterns is not None else _BLOCKED_SQL_PATTERNS
     # Check blocklist first
-    for name, pattern in _BLOCKED_SQL_PATTERNS:
+    for name, pattern in patterns:
         if pattern.search(sql):
             return False, f"Blocked SQL pattern detected: {name}"
 
@@ -139,9 +143,25 @@ class ActionGateway:
       - ``export_data(format: str)``  — only csv / json
 
     All other tool names are blocked by default.
+
+    ``extra_blocked_patterns`` accepts additional (label, compiled_pattern) tuples
+    injected at runtime by PatchGenerator without touching the module-level list.
     """
 
     _ALLOWED_TOOLS = {"query_db", "get_report", "export_data"}
+
+    def __init__(
+        self,
+        extra_blocked_patterns: list[tuple[str, re.Pattern[str]]] | None = None,
+    ) -> None:
+        # Instance copy so patches don't bleed across Gateway instances
+        self._blocked_patterns: list[tuple[str, re.Pattern[str]]] = list(_BLOCKED_SQL_PATTERNS)
+        if extra_blocked_patterns:
+            self._blocked_patterns.extend(extra_blocked_patterns)
+
+    def add_blocked_pattern(self, label: str, pattern: re.Pattern[str]) -> None:
+        """Hot-add a new SQL block pattern at runtime (used by PatchGenerator)."""
+        self._blocked_patterns.append((label, pattern))
 
     def check(self, request: ToolCallRequest) -> GatewayVerdict:
         """Validate a tool-call request and return a verdict."""
@@ -158,7 +178,7 @@ class ActionGateway:
         # 2. Tool-specific validation
         if tool == "query_db":
             sql = str(request.arguments.get("sql", ""))
-            safe, reason = _validate_sql(sql)
+            safe, reason = _validate_sql(sql, self._blocked_patterns)
             if not safe:
                 return GatewayVerdict(
                     status=ActionStatus.BLOCKED,
