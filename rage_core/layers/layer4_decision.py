@@ -12,9 +12,9 @@ Scoring weights (tunable via constructor):
   - Layer 3 LLM flagged:      +10 bonus      (LLM judge confirmed escalation)
 
 Band thresholds (adjustable):
-  - score < 30  → allow
-  - 30 ≤ score < 65  → warn
-  - score ≥ 65  → block
+  - score < 48  → allow
+  - 48 ≤ score < 82  → warn
+  - score ≥ 82  → block
 
 Crescendo-hardening — session-level ratchet (DefensePipeline):
   - A rolling suspicion score (EWMA of per-turn normalised scores) accumulates
@@ -47,7 +47,7 @@ class DecisionEngine:
         warn_threshold:  Score ≥ this → warn.   Default 30.
     """
 
-    def __init__(self, block_threshold: float = 65.0, warn_threshold: float = 30.0) -> None:
+    def __init__(self, block_threshold: float = 82.0, warn_threshold: float = 48.0) -> None:
         self._block_th = block_threshold
         self._warn_th = warn_threshold
 
@@ -90,22 +90,20 @@ class DecisionEngine:
         if l1.matched:
             score += 70.0
 
-        # Layer 2 — RAG similarity (0–1 → 0–30 pts)
-        score += min(l2.score, 1.0) * 30.0
+        # Layer 2 — RAG similarity (0–1 → 0–22 pts)
+        score += min(l2.score, 1.0) * 22.0
 
-        # Layer 3 — blended drift: take the maximum of turn-to-turn and cumulative
-        # drift so that both abrupt jumps AND gradual Crescendo trajectories are
-        # captured in a single 0–20 pt contribution.
+        # Layer 3 — blended drift (0–15 pts)
         blended_drift = max(l3.drift, l3.cumulative_drift)
-        score += min(blended_drift, 1.0) * 20.0
+        score += min(blended_drift, 1.0) * 15.0
 
-        # Crescendo bonus — sustained topic migration across turns
-        if turn_index >= 2 and l3.cumulative_drift > 0.75:
-            score += 5.0
+        # Crescendo bonus — only on strong sustained migration
+        if turn_index >= 2 and l3.cumulative_drift > 0.92:
+            score += 3.0
 
-        # Layer 3 — LLM judge bonus
+        # Layer 3 — LLM judge bonus (small nudge, not auto-block)
         if l3.llm_flagged:
-            score += 10.0
+            score += 5.0
 
         return round(min(score, 100.0), 2)
 
@@ -149,11 +147,11 @@ class DefensePipeline:
     ``session_risk_warn_threshold`` the entire band is elevated to BLOCK.
     """
 
-    # Class-level defaults (used when no constructor arg is given)
-    _EWMA_ALPHA: float = 0.5
-    _RATCHET_TURNS: int = 2
-    _SESSION_RISK_WARN_THRESHOLD: float = 0.18
-    _SESSION_RISK_BLOCK_THRESHOLD: float = 0.40
+    # Pragmatic defaults: maximize LLM/tool use; gateway enforces data boundaries.
+    _EWMA_ALPHA: float = 0.30
+    _RATCHET_TURNS: int = 6
+    _SESSION_RISK_WARN_THRESHOLD: float = 0.42
+    _SESSION_RISK_BLOCK_THRESHOLD: float = 0.72
 
     def __init__(
         self,
@@ -161,7 +159,7 @@ class DefensePipeline:
         ratchet_turns: int | None = None,
         session_risk_warn_threshold: float | None = None,
         session_risk_block_threshold: float | None = None,
-        warn_blocks_tools: bool = True,
+        warn_blocks_tools: bool = False,
     ) -> None:
         from rage_core.layers.layer1_rules import DeterministicPreFilter
         from rage_core.layers.layer2_rag import ThreatKBRetriever

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Load Mac M1 preset and cd to repo root.
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/_load-profile.sh" m1-8gb

@@ -136,7 +136,7 @@ class DynamicSemanticFilter:
 
     def __init__(
         self,
-        drift_threshold: float = 0.80,
+        drift_threshold: float = 0.92,
         use_llm_judge: Optional[bool] = None,
     ) -> None:
         from rage_core.llm.openai_compat import llm_judge_enabled

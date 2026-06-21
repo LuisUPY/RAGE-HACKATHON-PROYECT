@@ -33,9 +33,9 @@ def test_llm_judge_disabled_without_config() -> None:
     assert llm_judge_enabled() is False
 
 
-def test_llm_judge_enabled_with_ollama_url(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_llm_judge_not_auto_enabled_with_ollama_url(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
-    assert llm_judge_enabled() is True
+    assert llm_judge_enabled() is False
 
 
 def test_llm_judge_explicit_flag(monkeypatch: pytest.MonkeyPatch) -> None:

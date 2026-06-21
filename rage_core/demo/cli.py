@@ -59,9 +59,12 @@ def run_scenario(
         print(f"        L3     : drift={signal.layer3.drift:.3f}  suspicious={signal.layer3.suspicious}")
         print(f"        Score  : {signal.score:.1f}  Band: [{signal.band.value.upper()}]  latency={signal.latency_ms:.1f}ms")
 
-        # Execute tool call only when pipeline band is ALLOW
+        # Execute tool when ALLOW, or WARN unless warn_blocks_tools (default: tools allowed on WARN)
         verdict = None
-        if turn.tool_name and signal.band == Band.ALLOW:
+        tools_allowed = signal.band == Band.ALLOW or (
+            signal.band == Band.WARN and not pipeline.warn_blocks_tools
+        )
+        if turn.tool_name and tools_allowed:
             session_ctx = GatewaySessionContext(
                 session_risk_score=state.session_risk_score,
                 had_warn_or_block=state.had_warn_or_block,
@@ -79,7 +82,7 @@ def run_scenario(
                 print(f"        Reason : {result.error}")
         elif turn.tool_name and signal.band == Band.BLOCK:
             print(f"        Tool   : {turn.tool_name} → SKIPPED (turn blocked by pipeline)")
-        elif turn.tool_name and signal.band == Band.WARN:
+        elif turn.tool_name and signal.band == Band.WARN and pipeline.warn_blocks_tools:
             print(f"        Tool   : {turn.tool_name} → SKIPPED (WARN — tools disabled)")
 
         gateway_verdicts.append(verdict)
