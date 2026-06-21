@@ -17,6 +17,8 @@ Usage:
     uv run rage-bench --holdout --verbose # ver cada caso holdout + errores detallados
     uv run rage-bench --multi-turn         # escenarios multi-turno con contexto acumulado
     uv run rage-bench --multi-turn --verbose
+    uv run rage-bench --holdout --eval-set practice      # dataset de práctica (solo casos nuevos)
+    uv run rage-bench --multi-turn --eval-set practice   # escenarios de práctica multi-turno
 
 Exit code: 0 if accuracy >= 80% (closed KB). Holdout always exits 0 (métricas informativas).
 """
@@ -32,6 +34,8 @@ from rage_core.benchmark.dataset import (
     load_dataset,
     load_holdout_dataset,
     load_holdout_scenarios,
+    load_eval_holdout_dataset,
+    load_eval_scenarios,
     scenario_summary,
 )
 from rage_core.benchmark.evaluator import (
@@ -373,6 +377,7 @@ def _run_holdout(
     by_category: bool,
     filter_arg: str | None,
     rag_threshold: float | None = None,
+    eval_set: str | None = None,
 ) -> int:
     """Open-world evaluation on holdout cases never seen in the training KB."""
     if rag_threshold is not None:
@@ -380,13 +385,18 @@ def _run_holdout(
 
         policy.RAG_ATTACK_THRESHOLD = rag_threshold
 
-    cases = load_holdout_dataset()
+    if eval_set:
+        cases = load_eval_holdout_dataset(eval_set)
+        title = f"Evaluación PRÁCTICA (eval-set={eval_set})"
+    else:
+        cases = load_holdout_dataset()
+        title = "Evaluación ABIERTA (holdout)"
     summary = dataset_summary(cases)
 
     print()
     print("=" * (sum(_COL.values()) + len(_COL) * 3))
-    print("  RAGE — Evaluación ABIERTA (holdout)")
-    print("  Casos prácticos NO incluidos en threats.json / benign.json")
+    print(f"  RAGE — {title}")
+    print("  Casos NO incluidos en threats.json / benign.json (solo evaluación)")
     print(f"  Dataset: {summary['total']} casos  "
           f"({summary['attacks']} ataques / {summary['benign']} benignos)")
     print("  La KB se usa solo para detectar (L2 RAG) — las respuestas no están memorizadas.")
@@ -457,9 +467,15 @@ def _run_multi_turn(
     verbose: bool,
     by_category: bool,
     filter_arg: str | None,
+    eval_set: str | None = None,
 ) -> int:
     """Multi-turn open-world evaluation with accumulated conversation context."""
-    scenarios = load_holdout_scenarios()
+    if eval_set:
+        scenarios = load_eval_scenarios(eval_set)
+        title = f"Evaluación MULTI-TURNO PRÁCTICA (eval-set={eval_set})"
+    else:
+        scenarios = load_holdout_scenarios()
+        title = "Evaluación MULTI-TURNO (holdout scenarios)"
     if not scenarios:
         print("ERROR: no hay escenarios multi-turno.", file=sys.stderr)
         return 1
@@ -467,7 +483,7 @@ def _run_multi_turn(
     summary = scenario_summary(scenarios)
     print()
     print("=" * (sum(_COL.values()) + len(_COL) * 3))
-    print("  RAGE — Evaluación MULTI-TURNO (holdout scenarios)")
+    print(f"  RAGE — {title}")
     print("  Cada escenario corre en secuencia con contexto acumulado (Crescendo-style)")
     print(f"  Escenarios: {summary['scenarios']}  |  Turnos: {summary['turns']}  "
           f"({summary['attacks']} ataques / {summary['benign']} benignos)")
@@ -580,6 +596,12 @@ def main() -> int:
         help="Usar solo los turnos de los escenarios (no la KB)",
     )
     parser.add_argument(
+        "--eval-set",
+        metavar="NAME",
+        default=None,
+        help="Usar dataset de práctica alternativo (ej. practice). No cambia KB ni detección.",
+    )
+    parser.add_argument(
         "--filter",
         metavar="OUTCOME",
         choices=["tp", "tn", "fp", "fn", "TP", "TN", "FP", "FN"],
@@ -593,6 +615,7 @@ def main() -> int:
             verbose=args.verbose,
             by_category=args.by_category,
             filter_arg=args.filter,
+            eval_set=args.eval_set,
         )
 
     if args.holdout:
@@ -602,6 +625,7 @@ def main() -> int:
             by_category=args.by_category,
             filter_arg=args.filter,
             rag_threshold=args.rag_threshold,
+            eval_set=args.eval_set,
         )
 
     if args.demo:

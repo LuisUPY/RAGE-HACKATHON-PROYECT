@@ -242,6 +242,28 @@ class TestHoldoutDataset:
         assert m.recall >= 0.95, f"Holdout recall too low: {m.recall:.1%}"
 
 
+class TestEvalPracticeDataset:
+    def test_load_eval_practice_holdout(self) -> None:
+        from rage_core.benchmark.dataset import load_eval_holdout_dataset
+
+        cases = load_eval_holdout_dataset("practice")
+        assert len(cases) >= 30
+        assert any(c.is_attack for c in cases)
+        assert any(not c.is_attack for c in cases)
+
+    def test_load_eval_practice_scenarios(self) -> None:
+        from rage_core.benchmark.dataset import load_eval_scenarios
+
+        scenarios = load_eval_scenarios("practice")
+        assert len(scenarios) >= 15
+        assert all(len(s.turns) >= 2 for s in scenarios)
+
+    def test_eval_practice_runs_without_changing_default_holdout(self) -> None:
+        from rage_core.benchmark.dataset import load_eval_holdout_dataset, load_holdout_dataset
+
+        assert len(load_eval_holdout_dataset("practice")) != len(load_holdout_dataset())
+
+
 class TestMultiTurnBenchmark:
     def test_load_holdout_scenarios(self) -> None:
         from rage_core.benchmark.dataset import load_holdout_scenarios

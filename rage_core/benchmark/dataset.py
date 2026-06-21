@@ -31,6 +31,8 @@ _HOLDOUT_SCENARIOS_EXTENDED_PATH = (
 _HOLDOUT_SCENARIOS_COMPARISON_PATH = (
     Path(__file__).parent.parent / "kb" / "holdout_scenarios_comparison.json"
 )
+_EVAL_PRACTICE_DIR = Path(__file__).parent.parent / "kb" / "eval_practice"
+REGISTERED_EVAL_SETS: dict[str, Path] = {"practice": _EVAL_PRACTICE_DIR}
 
 
 @dataclass
@@ -227,6 +229,57 @@ def _load_holdout_scenarios() -> list[BenchmarkScenario]:
 def load_holdout_scenarios() -> list[BenchmarkScenario]:
     """Return open-world multi-turn scenarios for sequential evaluation."""
     return _load_holdout_scenarios()
+
+
+def load_eval_holdout_dataset(eval_set: str = "practice") -> list[BenchmarkCase]:
+    """Load alternate holdout cases for practice runs (does not replace default holdout)."""
+    base = REGISTERED_EVAL_SETS.get(eval_set)
+    if base is None:
+        raise ValueError(f"Unknown eval set {eval_set!r}. Available: {list(REGISTERED_EVAL_SETS)}")
+    path = base / "holdout.json"
+    if not path.exists():
+        raise FileNotFoundError(f"Missing {path}")
+
+    kb_texts = _kb_text_index()
+    with open(path, encoding="utf-8") as fh:
+        entries = json.load(fh)
+
+    cases: list[BenchmarkCase] = []
+    for entry in entries:
+        normalized = entry["text"].lower().strip()
+        if normalized in kb_texts:
+            raise ValueError(f"Eval case {entry['id']!r} duplicates KB text")
+        desc = entry.get("description", "")
+        cases.append(BenchmarkCase(
+            id=f"eval:{entry['id']}",
+            text=entry["text"],
+            is_attack=entry["is_attack"],
+            source=f"eval:{eval_set}",
+            category=entry.get("category", "unknown"),
+            description=desc,
+        ))
+    return cases
+
+
+def load_eval_scenarios(eval_set: str = "practice") -> list[BenchmarkScenario]:
+    """Load alternate multi-turn scenarios for practice runs."""
+    base = REGISTERED_EVAL_SETS.get(eval_set)
+    if base is None:
+        raise ValueError(f"Unknown eval set {eval_set!r}. Available: {list(REGISTERED_EVAL_SETS)}")
+    path = base / "scenarios.json"
+    if not path.exists():
+        raise FileNotFoundError(f"Missing {path}")
+
+    kb_texts = _kb_text_index()
+    with open(path, encoding="utf-8") as fh:
+        entries = json.load(fh)
+
+    seen: set[str] = set()
+    for entry in entries:
+        if entry["id"] in seen:
+            raise ValueError(f"Duplicate eval scenario id: {entry['id']!r}")
+        seen.add(entry["id"])
+    return _parse_holdout_scenario_entries(entries, kb_texts)
 
 
 def scenarios_to_cases(scenarios: list[BenchmarkScenario]) -> list[BenchmarkCase]:

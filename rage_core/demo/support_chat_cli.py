@@ -1,30 +1,15 @@
 """
 Interactive IT support chat: rage-chat-support
 
-RAGE + LLM judge + multi-turn escalation — same verdict policy as rage-bench --multi-turn.
-
-Setup:
-    cp .env.example .env   # fill keys
-    source .env
-    export RAGE_USE_LLM_JUDGE=1
-
-Usage:
-    uv run rage-chat-support
-    uv run rage-chat-support --model meta/llama-3.3-70b-instruct
-
-Commands inside the session:
-    /quit, /exit, /q  — salir
-    /status           — turnos, session risk, juez activo
-    /rage             — desglose L1/L2/L3 del último turno
-    /reset            — nueva conversación (estado limpio)
+Pide tus API keys al iniciar cada sesión (no usa .env para secretos).
 """
 from __future__ import annotations
 
 import argparse
 import sys
 
+from rage_core.config.env_loader import prompt_session_api_keys
 from rage_core.demo.support_agent import LocalSupportAgent
-from rage_core.config.env_loader import ensure_env_loaded, env_configured
 from rage_core.llm.openai_compat import (
     get_judge_model,
     get_llm_client,
@@ -65,32 +50,16 @@ def main() -> int:
     parser.add_argument(
         "--model",
         default=None,
-        help="Modelo asistente (default: RAGE_LLM_MODEL)",
+        help="Modelo asistente (default: RAGE_LLM_MODEL o meta/llama-3.3-70b-instruct)",
     )
     args = parser.parse_args()
 
-    ensure_env_loaded()
-    ok, hint = env_configured()
-    if not ok:
-        print(hint, file=sys.stderr)
+    if not prompt_session_api_keys():
         return 1
 
     if not has_llm_backend():
-        print(
-            "No hay backend LLM configurado.\n\n"
-            f"{hint}\n\n"
-            "  ./scripts/setup-env.sh\n"
-            "  ./scripts/run-support-chat.sh",
-            file=sys.stderr,
-        )
+        print("No se pudo configurar el backend LLM.", file=sys.stderr)
         return 1
-
-    if not llm_judge_enabled():
-        print(
-            "AVISO: RAGE_USE_LLM_JUDGE no está activo — el juez no se llamará.\n"
-            "  export RAGE_USE_LLM_JUDGE=1\n",
-            file=sys.stderr,
-        )
 
     client = get_llm_client()
     if client is None:
@@ -101,6 +70,7 @@ def main() -> int:
     judge_model = get_judge_model("nvidia/llama-3.1-nemotron-nano-8b-v1")
     agent = LocalSupportAgent(model=model)
 
+    print()
     print("=" * 62)
     print("  RAGE — Chat de SOPORTE TÉCNICO (IT Helpdesk CRM)")
     print("  Rol: asistente interno de tickets, informes y exports agregados")
@@ -109,7 +79,7 @@ def main() -> int:
     print("  Defensa   : L1 + L2 RAG + drift + juez + contexto multi-turno")
     print("-" * 62)
     print("  Comandos: /quit  /status  /rage  /reset")
-    print("  Prueba ataques multi-turno (Crescendo, IT pretext, salami…) aquí.")
+    print("  Prueba mensajes del dataset practice o tus propios escenarios.")
     print("=" * 62)
 
     while True:

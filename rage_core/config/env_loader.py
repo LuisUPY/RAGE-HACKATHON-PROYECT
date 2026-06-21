@@ -42,11 +42,49 @@ def bootstrap_nvidia_master_key() -> None:
     master = os.environ.get("RAGE_NVIDIA_API_KEY", "").strip()
     if _is_placeholder(master):
         return
-    os.environ.setdefault("RAGE_LLM_API_KEY", master)
-    os.environ.setdefault("RAGE_JUDGE_API_KEY", master)
+    os.environ["RAGE_LLM_API_KEY"] = master
+    os.environ["RAGE_JUDGE_API_KEY"] = master
     os.environ.setdefault("RAGE_LLM_BASE_URL", "https://integrate.api.nvidia.com/v1")
     os.environ.setdefault("RAGE_JUDGE_BASE_URL", "https://integrate.api.nvidia.com/v1")
     os.environ.setdefault("RAGE_USE_LLM_JUDGE", "1")
+
+
+def prompt_session_api_keys() -> bool:
+    """Ask for API keys interactively each session (not saved to disk). Returns True if configured."""
+    # Clear any keys from a previous session or .env so we always prompt fresh.
+    for key in (
+        "RAGE_NVIDIA_API_KEY",
+        "RAGE_LLM_API_KEY",
+        "RAGE_JUDGE_API_KEY",
+        "OPENAI_API_KEY",
+    ):
+        os.environ.pop(key, None)
+
+    print()
+    print("=" * 62)
+    print("  API keys — solo esta sesión (no se guardan en disco)")
+    print("  Obtén clave NVIDIA: https://build.nvidia.com → API Keys")
+    print("=" * 62)
+
+    nv_key = input("\nNVIDIA API key (nvapi-...): ").strip()
+    if nv_key:
+        os.environ["RAGE_NVIDIA_API_KEY"] = nv_key
+        bootstrap_nvidia_master_key()
+        judge_key = input("Juez API key (Enter = misma clave): ").strip()
+        if judge_key:
+            os.environ["RAGE_JUDGE_API_KEY"] = judge_key
+        os.environ["RAGE_USE_LLM_JUDGE"] = "1"
+        return True
+
+    print("\n¿Usar OpenAI en su lugar?")
+    oa_key = input("OpenAI API key (sk-... o Enter para cancelar): ").strip()
+    if oa_key:
+        os.environ["OPENAI_API_KEY"] = oa_key
+        os.environ["RAGE_USE_LLM_JUDGE"] = "1"
+        return True
+
+    print("\nSe necesita al menos una API key para continuar.")
+    return False
 
 
 def ensure_env_loaded() -> None:
