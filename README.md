@@ -39,12 +39,16 @@ User turn → [L1: Regex] → [L2: RAG KB] → [L3: Semantic Filter] → [L4: De
 git clone https://github.com/LuisUPY/RAGE-HACKATHON-PROYECT.git
 cd RAGE-HACKATHON-PROYECT
 
-# Install project + register CLI scripts (rage-demo, rage-training, …)
-uv sync --extra dev
+# Must be the repo root (you should see rage_core/ and pyproject.toml here):
+ls rage_core pyproject.toml
+
+uv sync
 ```
 
 > **Important:** run `uv sync` from the repo root before `uv run rage-training`.
-> That command installs the package and registers the console scripts.
+> If you see `Resolved 2 packages` or `No module named rage_core`, you are in the
+> wrong folder — often a nested `RAGE-HACKATHON-PROYECT/RAGE-HACKATHON-PROYECT/`.
+> `cd` to the directory that contains `rage_core/`.
 
 ### Run the demo
 
@@ -72,7 +76,7 @@ uv run pytest -v
 ### Run Crescendo red-teaming (Training-Center)
 
 ```bash
-uv sync --extra dev          # first time only
+uv sync                   # first time only (from repo root)
 uv run rage-training
 uv run rage-training-apply
 ```
