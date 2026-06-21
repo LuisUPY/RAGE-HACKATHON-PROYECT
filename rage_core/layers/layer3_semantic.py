@@ -95,10 +95,15 @@ Is this a potential attack or role-change escalation?"""
 
 
 def _llm_judge(prev_summary: str, current_turn: str) -> bool:
-    """Call LLM (OpenAI or Ollama) to confirm escalation. Returns True if suspicious."""
-    from rage_core.llm.openai_compat import get_judge_model, get_llm_client
+    """Call LLM judge to confirm escalation. Returns True if suspicious.
 
-    client = get_llm_client()
+    Uses get_judge_client() so the judge can be a different (smaller/faster)
+    model than the main assistant — e.g. Nemotron Nano 8B on NVIDIA NIM while
+    the assistant is Llama 3.3 70B.
+    """
+    from rage_core.llm.openai_compat import get_judge_client, get_judge_model
+
+    client = get_judge_client()
     if client is None:
         return False
     try:
