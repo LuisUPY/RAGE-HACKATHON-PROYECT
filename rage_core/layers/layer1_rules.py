@@ -35,6 +35,8 @@ _RAW_RULES: list[tuple[str, str, str]] = [
     ("L1-012", "Shell/OS command execution", r"(os\.system|subprocess\.run|exec\(|eval\(|import\s+os;)"),
     ("L1-013", "Exfiltrate data to external endpoint", r"exfiltrat\w*\s+(to|into)\s+(external|remote|attacker)"),
     ("L1-014", "Prompt leakage — reveal system prompt", r"(reveal|print|show|leak|expose)\s+(the\s+)?(system\s+prompt|your\s+instructions?|your\s+guidelines?)"),  # noqa: E501
+    ("L1-015", "Bulk PII / customer data exfiltration request", r"\bexport\s+ALL\b.*\b(?:customer|client|user|personal)\s+data\b"),  # noqa: E501
+    ("L1-016", "Override system instructions injection", r"override\s+(your\s+)?system\s+instructions?"),
 ]
 
 _COMPILED_RULES: list[_Rule] = [

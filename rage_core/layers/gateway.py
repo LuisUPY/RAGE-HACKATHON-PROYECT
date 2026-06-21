@@ -3,12 +3,17 @@ Action Gateway — gates tool-calls before they reach the connected agent.
 
 Security model:
   - Only explicitly allow-listed tool-call patterns are permitted.
-  - SQL queries are validated: only parameterized SELECTs against known tables.
-  - DROP, DELETE, INSERT, UPDATE, GRANT, TRUNCATE → always blocked.
-  - Subqueries that look like exfiltration (UNION [ALL|DISTINCT] SELECT, INTO OUTFILE) → blocked.
-  - Schema-inspection, DDL, time-based blind injection, and char-encoding obfuscation → blocked.
-  - ALL table references in FROM/JOIN clauses are validated against the allowlist
-    (prevents UNION ALL exfiltration to a second, non-allowlisted table).
+  - query_db: only safe SELECT queries against known tables.
+    Blocked: DROP, DELETE, TRUNCATE, ALTER, GRANT, UNION exfiltration,
+    schema probes, obfuscation, time-based blind injection.
+  - record_sale: parameterized INSERT via named arguments (no raw SQL).
+  - get_report: always allowed.
+  - export_data: only csv / json; blocked on extreme session risk (>0.95).
+
+Column-level restrictions were intentionally removed: the agent is a sales
+assistant that legitimately needs to view client names, amounts, and other
+business columns. Real protection comes from blocking destructive SQL and
+injection patterns, not from hiding data from the model's own user.
 
 This implements the "gateway of actions" layer described in OWASP LLM06
 (Excessive Agency): the system enforces least-privilege on tool invocations,
@@ -25,16 +30,16 @@ Crescendo-hardening notes (see Security Audit 2026-06):
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from rage_core.models import ActionStatus, GatewaySessionContext, GatewayVerdict, ToolCallRequest
 
 # --------------------------------------------------------------------------- #
-# SQL Safety Validator                                                         #
+# SQL Safety Validator (for query_db — SELECT only)                           #
 # --------------------------------------------------------------------------- #
 
-# Statements that are never allowed.
-# ORDER MATTERS: more-specific patterns should come first so error messages
-# are maximally informative, but correctness does not depend on order.
+# Statements that are never allowed in query_db.
+# ORDER MATTERS: more-specific patterns should come first.
 _BLOCKED_SQL_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     # --- DDL & destructive DML ---
     ("DROP statement", re.compile(r"\bDROP\b", re.IGNORECASE)),
@@ -47,7 +52,6 @@ _BLOCKED_SQL_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     # --- Privilege manipulation ---
     ("GRANT/REVOKE privileges", re.compile(r"\b(GRANT|REVOKE)\b", re.IGNORECASE)),
     # --- Exfiltration via UNION (ANY variant: UNION ALL, UNION DISTINCT, etc.) ---
-    # Previously only matched `UNION SELECT`; `UNION ALL SELECT` was a confirmed bypass.
     ("UNION-based exfiltration", re.compile(r"\bUNION\b", re.IGNORECASE)),
     # --- File I/O ---
     ("INTO OUTFILE / DUMPFILE exfiltration", re.compile(r"\bINTO\s+(OUTFILE|DUMPFILE)\b", re.IGNORECASE)),
@@ -59,9 +63,7 @@ _BLOCKED_SQL_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
         r"\b(SLEEP\s*\(|BENCHMARK\s*\(|WAITFOR\s+DELAY)\b", re.IGNORECASE
     )),
     # --- Encoding / obfuscation functions ---
-    # CHAR(68,82,79,80) can spell "DROP"; block any CHAR() usage in SQL.
     ("CHAR() encoding obfuscation", re.compile(r"\bCHAR\s*\(", re.IGNORECASE)),
-    # Hex literals like 0x44524f50 can encode keywords.
     ("Hex literal obfuscation", re.compile(r"\b0x[0-9a-fA-F]+\b")),
     # --- Schema enumeration ---
     ("Information-schema probe", re.compile(r"\binformation_schema\b", re.IGNORECASE)),
@@ -74,63 +76,11 @@ _BLOCKED_SQL_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
 
 _ALLOWED_TABLES = {"sales", "products", "regions"}
 
-# Column allowlist per table (least-privilege). SELECT * is blocked on restricted tables.
-_ALLOWED_COLUMNS_BY_TABLE: dict[str, set[str]] = {
-    "sales": {"product", "amount", "region"},
-}
-
-# Block full-data export when session risk exceeds this normalised threshold.
-_EXPORT_SESSION_RISK_THRESHOLD = 0.18
+# Block bulk export only on clearly elevated session risk.
+_EXPORT_SESSION_RISK_THRESHOLD = 0.95
 
 # Extracts ALL table/alias names that follow FROM or JOIN keywords.
 _ALL_TABLES_RE = re.compile(r"\b(?:FROM|JOIN)\s+(\w+)\b", re.IGNORECASE)
-_SELECT_CLAUSE_RE = re.compile(r"^\s*SELECT\s+(.*?)\s+FROM\b", re.IGNORECASE | re.DOTALL)
-_AGG_COLUMN_RE = re.compile(
-    r"(?:SUM|COUNT|AVG|MIN|MAX)\s*\(\s*(?:DISTINCT\s+)?(\w+)\s*\)",
-    re.IGNORECASE,
-)
-
-
-def _extract_requested_columns(sql: str) -> tuple[bool, set[str]]:
-    """Return (is_wildcard, lowercase column names) from the SELECT list."""
-    match = _SELECT_CLAUSE_RE.match(sql)
-    if not match:
-        return False, set()
-
-    select_clause = match.group(1).strip()
-    if "*" in select_clause:
-        return True, set()
-
-    columns: set[str] = set()
-    for part in select_clause.split(","):
-        token = part.strip()
-        token = re.split(r"\s+AS\s+", token, maxsplit=1, flags=re.IGNORECASE)[0].strip()
-        agg = _AGG_COLUMN_RE.match(token)
-        if agg:
-            columns.add(agg.group(1).lower())
-            continue
-        token = re.sub(r"^\w+\.", "", token).strip()
-        if re.match(r"^\w+$", token):
-            columns.add(token.lower())
-    return False, columns
-
-
-def _validate_columns(sql: str, tables: list[str]) -> tuple[bool, str]:
-    """Enforce column allowlist on tables that define one."""
-    is_wildcard, columns = _extract_requested_columns(sql)
-    for table in tables:
-        allowed = _ALLOWED_COLUMNS_BY_TABLE.get(table.lower())
-        if allowed is None:
-            continue
-        if is_wildcard:
-            return False, f"SELECT * not allowed on table '{table}'"
-        disallowed = columns - allowed
-        if disallowed:
-            return False, (
-                f"Column(s) {sorted(disallowed)} not allowed on table '{table}'; "
-                f"allowed: {sorted(allowed)}"
-            )
-    return True, "OK"
 
 
 def _validate_sql(
@@ -139,26 +89,19 @@ def _validate_sql(
 ) -> tuple[bool, str]:
     """Return (is_safe, reason).  is_safe=True means the query is allowed.
 
-    Validation approach:
-      1. Check the blocklist (destructive / obfuscation / privilege statements).
-      2. Must start with SELECT.
-      3. ALL tables referenced in FROM / JOIN clauses must be in the allowlist.
-         This prevents UNION-branch exfiltration to a non-allowlisted table even
-         if the UNION keyword itself somehow evaded the blocklist.
-    This allows SELECT with GROUP BY, ORDER BY, HAVING, aggregate functions,
-    and explicit JOINs between allowed tables.
+    Validation:
+      1. Blocklist check (destructive / obfuscation / exfiltration patterns).
+      2. Must be a SELECT statement.
+      3. All tables in FROM/JOIN must be in the allowlist.
     """
     patterns = blocked_patterns if blocked_patterns is not None else _BLOCKED_SQL_PATTERNS
-    # Check blocklist first
     for name, pattern in patterns:
         if pattern.search(sql):
             return False, f"Blocked SQL pattern detected: {name}"
 
-    # Must be a SELECT
     if not re.match(r"^\s*SELECT\b", sql, re.IGNORECASE):
-        return False, "Only SELECT statements are allowed"
+        return False, "Only SELECT statements are allowed via query_db; use record_sale() to add data"
 
-    # Extract ALL table references and validate each against the allowlist.
     tables_found = _ALL_TABLES_RE.findall(sql)
     if not tables_found:
         return False, "Could not extract any table name from SELECT statement"
@@ -167,9 +110,38 @@ def _validate_sql(
         if table.lower() not in _ALLOWED_TABLES:
             return False, f"Table '{table}' is not in the allowlist {_ALLOWED_TABLES}"
 
-    ok, reason = _validate_columns(sql, tables_found)
-    if not ok:
-        return False, reason
+    return True, "OK"
+
+
+# --------------------------------------------------------------------------- #
+# record_sale validator                                                        #
+# --------------------------------------------------------------------------- #
+
+def _validate_record_sale(args: dict[str, Any]) -> tuple[bool, str]:
+    """Validate arguments for the record_sale tool.
+
+    Uses named parameters (never raw SQL), so SQL injection is not possible
+    at the tool level. Validation here enforces business constraints.
+    """
+    product = args.get("product")
+    amount = args.get("amount")
+    client = args.get("client")
+    region = args.get("region")
+
+    if not product or not isinstance(product, str) or not product.strip():
+        return False, "record_sale: 'product' must be a non-empty string"
+    if amount is None:
+        return False, "record_sale: 'amount' is required"
+    try:
+        amt = float(amount)
+    except (TypeError, ValueError):
+        return False, "record_sale: 'amount' must be a number"
+    if amt < 0:
+        return False, "record_sale: 'amount' must be non-negative"
+    if not client or not isinstance(client, str) or not client.strip():
+        return False, "record_sale: 'client' must be a non-empty string"
+    if not region or not isinstance(region, str) or not region.strip():
+        return False, "record_sale: 'region' must be a non-empty string"
 
     return True, "OK"
 
@@ -188,11 +160,8 @@ def _validate_export(
     fmt_l = fmt.lower()
     if fmt_l not in _ALLOWED_EXPORT_FORMATS:
         return False, f"Export format '{fmt_l}' not allowed; use one of {_ALLOWED_EXPORT_FORMATS}"
-    if session and (
-        session.had_warn_or_block
-        or session.session_risk_score > _EXPORT_SESSION_RISK_THRESHOLD
-    ):
-        return False, "Export blocked: elevated session risk detected"
+    if session and session.session_risk_score > _EXPORT_SESSION_RISK_THRESHOLD:
+        return False, "Export blocked: confirmed high-risk session"
     return True, "OK"
 
 
@@ -205,9 +174,10 @@ class ActionGateway:
     """Validates and gates tool-call requests before execution.
 
     Tool allowlist:
-      - ``query_db(sql: str)``  — only safe SELECT queries
-      - ``get_report()``         — always allowed (no parameters)
-      - ``export_data(format: str)``  — only csv / json
+      - ``query_db(sql: str)``                              — SELECT queries on allowed tables
+      - ``record_sale(product, amount, client, region)``    — parameterized INSERT (safe)
+      - ``get_report()``                                    — always allowed
+      - ``export_data(format: str)``                        — csv / json only
 
     All other tool names are blocked by default.
 
@@ -215,13 +185,12 @@ class ActionGateway:
     injected at runtime by PatchGenerator without touching the module-level list.
     """
 
-    _ALLOWED_TOOLS = {"query_db", "get_report", "export_data"}
+    _ALLOWED_TOOLS = {"query_db", "get_report", "export_data", "record_sale"}
 
     def __init__(
         self,
         extra_blocked_patterns: list[tuple[str, re.Pattern[str]]] | None = None,
     ) -> None:
-        # Instance copy so patches don't bleed across Gateway instances
         self._blocked_patterns: list[tuple[str, re.Pattern[str]]] = list(_BLOCKED_SQL_PATTERNS)
         if extra_blocked_patterns:
             self._blocked_patterns.extend(extra_blocked_patterns)
@@ -238,7 +207,6 @@ class ActionGateway:
         """Validate a tool-call request and return a verdict."""
         tool = request.tool_name
 
-        # 1. Tool must be in allowlist
         if tool not in self._ALLOWED_TOOLS:
             return GatewayVerdict(
                 status=ActionStatus.BLOCKED,
@@ -246,11 +214,19 @@ class ActionGateway:
                 reason=f"Tool '{tool}' is not in the allowlist",
             )
 
-        # 2. Tool-specific validation
         if tool == "query_db":
             sql = str(request.arguments.get("sql", ""))
             safe, reason = _validate_sql(sql, self._blocked_patterns)
             if not safe:
+                return GatewayVerdict(
+                    status=ActionStatus.BLOCKED,
+                    tool_call=request,
+                    reason=reason,
+                )
+
+        elif tool == "record_sale":
+            ok, reason = _validate_record_sale(request.arguments)
+            if not ok:
                 return GatewayVerdict(
                     status=ActionStatus.BLOCKED,
                     tool_call=request,
@@ -267,7 +243,6 @@ class ActionGateway:
                     reason=reason,
                 )
 
-        # 3. Permitted
         return GatewayVerdict(
             status=ActionStatus.PERMITTED,
             tool_call=request,

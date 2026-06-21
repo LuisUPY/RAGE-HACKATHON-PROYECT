@@ -1,9 +1,18 @@
 """
 Interactive chat CLI: rage-chat
 
+Sales assistant protected by RAGE+Judge, backed by NVIDIA NIM.
+
+Setup:
+    export RAGE_LLM_BASE_URL=https://integrate.api.nvidia.com/v1
+    export RAGE_LLM_API_KEY=nvapi-...           (from build.nvidia.com)
+    export RAGE_LLM_MODEL=meta/llama-3.3-70b-instruct
+    export RAGE_JUDGE_MODEL=nvidia/llama-3.1-nemotron-nano-8b-v1
+    export RAGE_USE_LLM_JUDGE=1
+
 Usage:
     uv run rage-chat
-    uv run rage-chat --model qwen2.5:7b-instruct
+    uv run rage-chat --model meta/llama-3.1-70b-instruct
 """
 from __future__ import annotations
 
@@ -12,29 +21,34 @@ import sys
 
 from rage_core.demo.local_agent import LocalSalesAgent
 from rage_core.llm.openai_compat import get_llm_client, get_llm_model, has_llm_backend
-from rage_core.models import Band
 
 
 def _print_signal(signal) -> None:
-    print(
-        f"  [RAGE] score={signal.score:.1f} band={signal.band.value.upper()} "
-        f"L2={signal.layer2.score:.3f} L3_drift={signal.layer3.drift:.3f}"
-    )
+    if signal.layer1.matched:
+        print(
+            f"  [RAGE] Injection detected — access denied "
+            f"({signal.layer1.pattern_id}: {signal.layer1.matched_text!r})"
+        )
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="RAGE local chat with Ollama")
+    parser = argparse.ArgumentParser(description="RAGE sales chat — powered by NVIDIA NIM")
     parser.add_argument(
         "--model",
         default=None,
-        help="Ollama model name (default: OLLAMA_MODEL / RAGE_LLM_MODEL env)",
+        help="Model name override (default: RAGE_LLM_MODEL env var)",
     )
     args = parser.parse_args()
 
     if not has_llm_backend():
         print(
-            "No LLM backend configured.\n"
-            "Set OLLAMA_BASE_URL=http://localhost:11434/v1 (see windows-ollama/).",
+            "No LLM backend configured.\n\n"
+            "Setup NVIDIA NIM:\n"
+            "  export RAGE_LLM_BASE_URL=https://integrate.api.nvidia.com/v1\n"
+            "  export RAGE_LLM_API_KEY=nvapi-...       (from build.nvidia.com)\n"
+            "  export RAGE_LLM_MODEL=meta/llama-3.3-70b-instruct\n"
+            "  export RAGE_JUDGE_MODEL=nvidia/llama-3.1-nemotron-nano-8b-v1\n"
+            "  export RAGE_USE_LLM_JUDGE=1",
             file=sys.stderr,
         )
         return 1
@@ -46,10 +60,11 @@ def main() -> int:
         return 1
 
     agent = LocalSalesAgent(model=model)
-    print("RAGE Chat — Ollama local agent")
-    print(f"Model: {model}")
-    print("Commands: /quit /status /band")
-    print("-" * 50)
+    print("RAGE Chat — Sales assistant (NVIDIA NIM + RAGE protection)")
+    print(f"Modelo   : {model}")
+    print("Comandos : /quit  /status")
+    print("Tools    : query_db · record_sale · get_report · export_data")
+    print("-" * 60)
 
     while True:
         try:
@@ -66,21 +81,10 @@ def main() -> int:
         if user_text.lower() == "/status":
             print(f"  turns={agent.state.turn_index} session_risk={agent.state.session_risk_score:.3f}")
             continue
-        if user_text.lower() == "/band":
-            if agent.state.signals:
-                last = agent.state.signals[-1]
-                _print_signal(last)
-            else:
-                print("  No turns yet.")
-            continue
 
         result = agent.handle_turn(user_text)
         _print_signal(result.signal)
         print(f"\nAgent> {result.assistant_text}")
-
-        if result.tool_result and not result.tool_result.success:
-            if result.signal.band == Band.ALLOW:
-                print("  (tool blocked by gateway despite ALLOW band)")
 
 
 if __name__ == "__main__":

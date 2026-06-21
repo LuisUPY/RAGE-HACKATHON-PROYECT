@@ -1,11 +1,17 @@
 """
-Local sales agent backed by Ollama (OpenAI-compatible API).
+Sales agent backed by NVIDIA NIM (OpenAI-compatible API).
 
-Flow per user turn:
-  1. DefensePipeline evaluates the message.
-  2. On ALLOW → call Ollama with tool schema.
-  3. Parse optional tool call from JSON response.
-  4. Execute tool via SalesAgent + ActionGateway.
+Backend: NVIDIA NIM — https://build.nvidia.com
+  export RAGE_LLM_BASE_URL=https://integrate.api.nvidia.com/v1
+  export RAGE_LLM_API_KEY=nvapi-...
+  export RAGE_LLM_MODEL=meta/llama-3.3-70b-instruct
+  export RAGE_JUDGE_MODEL=nvidia/llama-3.1-nemotron-nano-8b-v1
+  export RAGE_USE_LLM_JUDGE=1
+
+Access policy (injection-only):
+  - Deny LLM + tools ONLY when Layer 1 matches a known malicious injection signature.
+  - All other pipeline signals (L2/L3, warn/block bands) are logged but do not restrict use.
+  - ActionGateway enforces SQL/export boundaries on every tool call.
 """
 from __future__ import annotations
 
@@ -15,27 +21,34 @@ import re
 from dataclasses import dataclass, field
 
 from rage_core.demo.agent import SalesAgent, ToolResult
+from rage_core.layers.access_policy import is_confirmed_injection, is_malicious_tool_request
 from rage_core.layers.layer4_decision import DefensePipeline
 from rage_core.llm.openai_compat import get_llm_client, get_llm_model
-from rage_core.models import Band, ConversationState, GatewaySessionContext, TurnSignal
+from rage_core.models import ConversationState, GatewaySessionContext, TurnSignal
 
 logger = logging.getLogger("rage.chat")
 
 _SYSTEM_PROMPT = """\
 You are a sales assistant with access to a SQLite sales database.
 
-Available tools (respond with JSON only when calling a tool):
-  query_db(sql: str)     — run a read-only SELECT query
-  get_report()           — regional sales summary
-  export_data(format)  — export all sales (format: csv or json)
+Available tools — reply with ONLY a JSON object when calling one:
 
-When you need a tool, reply with ONLY a JSON object:
-{"tool": "query_db", "arguments": {"sql": "SELECT ..."}}
-or {"tool": "get_report", "arguments": {}}
-or {"tool": "export_data", "arguments": {"format": "csv"}}
+  query_db(sql)                              — run a SELECT query
+  record_sale(product, amount, client, region) — add a new sale record
+  get_report()                               — regional sales summary
+  export_data(format)                        — export data (format: csv or json)
 
-When no tool is needed, reply with plain text (no JSON).
-Never execute destructive SQL (DROP, DELETE, TRUNCATE, ALTER).
+Tool call format examples:
+  {"tool": "query_db",    "arguments": {"sql": "SELECT product, SUM(amount) FROM sales GROUP BY product"}}
+  {"tool": "record_sale", "arguments": {"product": "Widget A", "amount": 500.0, "client": "Acme Corp", "region": "North"}}
+  {"tool": "get_report",  "arguments": {}}
+  {"tool": "export_data", "arguments": {"format": "csv"}}
+
+Rules:
+- When no tool is needed, reply in plain text (no JSON).
+- Use record_sale() to add new sales — never use INSERT in query_db.
+- Never run DROP, DELETE, TRUNCATE, ALTER, or GRANT via query_db.
+- Only SELECT queries are accepted in query_db.
 """
 
 _JSON_BLOCK_RE = re.compile(r"\{[^{}]*\"tool\"[^{}]*\}", re.DOTALL)
@@ -64,23 +77,10 @@ class LocalSalesAgent:
         signal = self.pipeline.evaluate(user_text, self.state)
         self._history.append({"role": "user", "content": user_text})
 
-        if signal.band == Band.BLOCK:
+        if is_confirmed_injection(signal):
             msg = (
-                f"[RAGE BLOCK] Turn blocked (score={signal.score:.1f}). "
-                "Request denied for security reasons."
-            )
-            self._history.append({"role": "assistant", "content": msg})
-            return ChatTurnResult(
-                user_text=user_text,
-                signal=signal,
-                assistant_text=msg,
-                blocked=True,
-            )
-
-        if signal.band == Band.WARN:
-            msg = (
-                f"[RAGE WARN] Elevated risk (score={signal.score:.1f}). "
-                "Tool execution disabled for this turn."
+                f"[RAGE] Malicious injection blocked ({signal.layer1.pattern_id}). "
+                "Access denied."
             )
             self._history.append({"role": "assistant", "content": msg})
             return ChatTurnResult(
@@ -92,7 +92,12 @@ class LocalSalesAgent:
 
         client = get_llm_client()
         if client is None:
-            msg = "[ERROR] No LLM configured. Set OLLAMA_BASE_URL or OPENAI_API_KEY."
+            msg = (
+                "[ERROR] No LLM configured.\n"
+                "  export RAGE_LLM_BASE_URL=https://integrate.api.nvidia.com/v1\n"
+                "  export RAGE_LLM_API_KEY=nvapi-...\n"
+                "  export RAGE_LLM_MODEL=meta/llama-3.3-70b-instruct"
+            )
             return ChatTurnResult(user_text=user_text, signal=signal, assistant_text=msg)
 
         try:
@@ -121,6 +126,18 @@ class LocalSalesAgent:
             )
 
         tool_name, arguments = tool_call
+        if is_malicious_tool_request(signal, tool_name, arguments):
+            msg = (
+                f"[RAGE] Tool `{tool_name}` blocked — confirmed injection signature (L1)."
+            )
+            self._history.append({"role": "assistant", "content": msg})
+            return ChatTurnResult(
+                user_text=user_text,
+                signal=signal,
+                assistant_text=msg,
+                blocked=True,
+            )
+
         session_ctx = GatewaySessionContext(
             session_risk_score=self.state.session_risk_score,
             had_warn_or_block=self.state.had_warn_or_block,
@@ -134,12 +151,18 @@ class LocalSalesAgent:
             reply = f"Tool `{tool_name}` executed successfully:\n{tool_result.to_text()}"
         else:
             reply = f"Tool `{tool_name}` failed: {tool_result.error}"
+            if tool_result.error and "[GATEWAY BLOCKED]" in tool_result.error:
+                reply += (
+                    "\n\n(The database is read-only. I can still help you record "
+                    "sales amounts in this chat — tell me product and amount.)"
+                )
         self._history.append({"role": "assistant", "content": reply})
         return ChatTurnResult(
             user_text=user_text,
             signal=signal,
             assistant_text=reply,
             tool_result=tool_result,
+            blocked=False,
         )
 
 
