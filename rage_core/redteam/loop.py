@@ -22,7 +22,7 @@ from typing import Any
 
 from rage_core.demo.agent import SalesAgent
 from rage_core.layers.layer4_decision import DefensePipeline
-from rage_core.models import ActionStatus, Band, ConversationState, GatewayVerdict, TurnSignal
+from rage_core.models import ActionStatus, Band, ConversationState, GatewaySessionContext, GatewayVerdict, TurnSignal
 from rage_core.redteam.attack_llm import CrescendoAttackLLM, GeneratedTurn
 from rage_core.redteam.vulnerability_db import Vulnerability, VulnerabilityDB
 from rage_core.training.paths import get_training_center_root
@@ -283,34 +283,46 @@ class AdaptiveRedTeamLoop:
                     rephrased = self._attacker.rephrase(generated, "pipeline BLOCK", objective)
                     backtrack_count += 1
                     records.append(self._make_record(
-                        turn_idx, generated, last_signal, None, None, False, backtrack=True
+                        turn_idx, generated, last_signal, state, None, None, False, backtrack=True
                     ))
-                    # retry with rephrased turn (don't advance history)
                     last_signal = pipeline.evaluate(rephrased.user_text, state)
                     band = last_signal.band
                     generated = rephrased
                     turn = rephrased.to_turn()
-            else:
+
+            if band == Band.WARN and pipeline.warn_blocks_tools:
                 if turn.tool_name:
-                    tool_result = agent.call_tool(turn.tool_name, **(turn.tool_args or {}))
-                    if agent.verdicts:
-                        verdict = agent.verdicts[-1]
-                        tool_permitted = verdict.status == ActionStatus.PERMITTED
-                        gateway_reason = verdict.reason
-                    else:
-                        tool_permitted = tool_result.success
-                        gateway_reason = "no verdict"
+                    tool_permitted = False
+                    gateway_reason = "pipeline WARN — tools disabled"
+            elif band == Band.ALLOW and turn.tool_name:
+                session_ctx = GatewaySessionContext(
+                    session_risk_score=state.session_risk_score,
+                    had_warn_or_block=state.had_warn_or_block,
+                )
+                tool_result = agent.call_tool(
+                    turn.tool_name,
+                    session_context=session_ctx,
+                    **(turn.tool_args or {}),
+                )
+                if agent.verdicts:
+                    verdict = agent.verdicts[-1]
+                    tool_permitted = verdict.status == ActionStatus.PERMITTED
+                    gateway_reason = verdict.reason
+                else:
+                    tool_permitted = tool_result.success
+                    gateway_reason = "no verdict"
 
-                    if tool_permitted and turn.is_attack:
-                        attack_success = True
-                        success = True
-                        bypass_turn = turn_idx + 1
+                if tool_permitted and turn.is_attack:
+                    attack_success = True
+                    success = True
+                    bypass_turn = turn_idx + 1
 
+            if band != Band.BLOCK:
                 history.append({"role": "user", "content": turn.user_text})
                 history.append({"role": "assistant", "content": "[agent response]"})
 
             records.append(self._make_record(
-                turn_idx, generated, last_signal, tool_permitted, gateway_reason, attack_success
+                turn_idx, generated, last_signal, state, tool_permitted, gateway_reason, attack_success
             ))
 
             if attack_success:
@@ -357,6 +369,7 @@ class AdaptiveRedTeamLoop:
         turn_idx: int,
         generated: GeneratedTurn,
         signal: TurnSignal,
+        state: ConversationState,
         tool_permitted: bool | None,
         gateway_reason: str | None,
         attack_success: bool,
@@ -373,7 +386,7 @@ class AdaptiveRedTeamLoop:
             l2_score=signal.layer2.score,
             l3_drift=signal.layer3.drift,
             l3_cumulative_drift=signal.layer3.cumulative_drift,
-            session_risk=0.0,
+            session_risk=round(state.session_risk_score, 4),
             tool_permitted=tool_permitted,
             gateway_reason=gateway_reason,
             attack_success=attack_success,

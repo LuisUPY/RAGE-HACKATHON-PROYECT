@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import re
 
-from rage_core.models import ActionStatus, GatewayVerdict, ToolCallRequest
+from rage_core.models import ActionStatus, GatewaySessionContext, GatewayVerdict, ToolCallRequest
 
 # --------------------------------------------------------------------------- #
 # SQL Safety Validator                                                         #
@@ -74,9 +74,63 @@ _BLOCKED_SQL_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
 
 _ALLOWED_TABLES = {"sales", "products", "regions"}
 
+# Column allowlist per table (least-privilege). SELECT * is blocked on restricted tables.
+_ALLOWED_COLUMNS_BY_TABLE: dict[str, set[str]] = {
+    "sales": {"product", "amount", "region"},
+}
+
+# Block full-data export when session risk exceeds this normalised threshold.
+_EXPORT_SESSION_RISK_THRESHOLD = 0.18
+
 # Extracts ALL table/alias names that follow FROM or JOIN keywords.
-# This ensures every table in a query (including UNION branches) is validated.
 _ALL_TABLES_RE = re.compile(r"\b(?:FROM|JOIN)\s+(\w+)\b", re.IGNORECASE)
+_SELECT_CLAUSE_RE = re.compile(r"^\s*SELECT\s+(.*?)\s+FROM\b", re.IGNORECASE | re.DOTALL)
+_AGG_COLUMN_RE = re.compile(
+    r"(?:SUM|COUNT|AVG|MIN|MAX)\s*\(\s*(?:DISTINCT\s+)?(\w+)\s*\)",
+    re.IGNORECASE,
+)
+
+
+def _extract_requested_columns(sql: str) -> tuple[bool, set[str]]:
+    """Return (is_wildcard, lowercase column names) from the SELECT list."""
+    match = _SELECT_CLAUSE_RE.match(sql)
+    if not match:
+        return False, set()
+
+    select_clause = match.group(1).strip()
+    if "*" in select_clause:
+        return True, set()
+
+    columns: set[str] = set()
+    for part in select_clause.split(","):
+        token = part.strip()
+        token = re.split(r"\s+AS\s+", token, maxsplit=1, flags=re.IGNORECASE)[0].strip()
+        agg = _AGG_COLUMN_RE.match(token)
+        if agg:
+            columns.add(agg.group(1).lower())
+            continue
+        token = re.sub(r"^\w+\.", "", token).strip()
+        if re.match(r"^\w+$", token):
+            columns.add(token.lower())
+    return False, columns
+
+
+def _validate_columns(sql: str, tables: list[str]) -> tuple[bool, str]:
+    """Enforce column allowlist on tables that define one."""
+    is_wildcard, columns = _extract_requested_columns(sql)
+    for table in tables:
+        allowed = _ALLOWED_COLUMNS_BY_TABLE.get(table.lower())
+        if allowed is None:
+            continue
+        if is_wildcard:
+            return False, f"SELECT * not allowed on table '{table}'"
+        disallowed = columns - allowed
+        if disallowed:
+            return False, (
+                f"Column(s) {sorted(disallowed)} not allowed on table '{table}'; "
+                f"allowed: {sorted(allowed)}"
+            )
+    return True, "OK"
 
 
 def _validate_sql(
@@ -113,6 +167,10 @@ def _validate_sql(
         if table.lower() not in _ALLOWED_TABLES:
             return False, f"Table '{table}' is not in the allowlist {_ALLOWED_TABLES}"
 
+    ok, reason = _validate_columns(sql, tables_found)
+    if not ok:
+        return False, reason
+
     return True, "OK"
 
 
@@ -123,9 +181,18 @@ def _validate_sql(
 _ALLOWED_EXPORT_FORMATS = {"csv", "json"}
 
 
-def _validate_export(fmt: str) -> tuple[bool, str]:
-    if fmt.lower() not in _ALLOWED_EXPORT_FORMATS:
-        return False, f"Export format '{fmt}' not allowed; use one of {_ALLOWED_EXPORT_FORMATS}"
+def _validate_export(
+    fmt: str,
+    session: GatewaySessionContext | None = None,
+) -> tuple[bool, str]:
+    fmt_l = fmt.lower()
+    if fmt_l not in _ALLOWED_EXPORT_FORMATS:
+        return False, f"Export format '{fmt_l}' not allowed; use one of {_ALLOWED_EXPORT_FORMATS}"
+    if session and (
+        session.had_warn_or_block
+        or session.session_risk_score > _EXPORT_SESSION_RISK_THRESHOLD
+    ):
+        return False, "Export blocked: elevated session risk detected"
     return True, "OK"
 
 
@@ -163,7 +230,11 @@ class ActionGateway:
         """Hot-add a new SQL block pattern at runtime (used by PatchGenerator)."""
         self._blocked_patterns.append((label, pattern))
 
-    def check(self, request: ToolCallRequest) -> GatewayVerdict:
+    def check(
+        self,
+        request: ToolCallRequest,
+        session: GatewaySessionContext | None = None,
+    ) -> GatewayVerdict:
         """Validate a tool-call request and return a verdict."""
         tool = request.tool_name
 
@@ -188,7 +259,7 @@ class ActionGateway:
 
         elif tool == "export_data":
             fmt = str(request.arguments.get("format", ""))
-            ok, reason = _validate_export(fmt)
+            ok, reason = _validate_export(fmt, session)
             if not ok:
                 return GatewayVerdict(
                     status=ActionStatus.BLOCKED,
