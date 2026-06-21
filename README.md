@@ -35,20 +35,32 @@ User turn → [L1: Regex] → [L2: RAG KB] → [L3: Semantic Filter] → [L4: De
 
 ### Install
 
+**Clone limpio (recomendado si `rage_core` no aparece):**
+
 ```bash
+cd ~
 git clone https://github.com/LuisUPY/RAGE-HACKATHON-PROYECT.git
 cd RAGE-HACKATHON-PROYECT
-
-# Must be the repo root (you should see rage_core/ and pyproject.toml here):
-ls rage_core pyproject.toml
-
+bash scripts/check_setup.sh    # debe decir "Estructura OK"
 uv sync
 ```
 
-> **Important:** run `uv sync` from the repo root before `uv run rage-training`.
-> If you see `Resolved 2 packages` or `No module named rage_core`, you are in the
-> wrong folder — often a nested `RAGE-HACKATHON-PROYECT/RAGE-HACKATHON-PROYECT/`.
-> `cd` to the directory that contains `rage_core/`.
+Verificación manual:
+
+```bash
+ls rage_core pyproject.toml tests
+grep rage-multiturn pyproject.toml
+```
+
+Deberías ver carpetas `demo`, `layers`, `training` dentro de `rage_core/`.
+
+> **No clones dentro de otra carpeta del mismo nombre** — evita
+> `RAGE-HACKATHON-PROYECT/RAGE-HACKATHON-PROYECT/`. Un solo nivel:
+> `~/RAGE-HACKATHON-PROYECT/` con `rage_core/` al mismo nivel que `README.md`.
+
+> Si `uv sync` dice `Resolved 2 packages` o `ls rage_core` falla, estás en el
+> directorio equivocado o el remote apunta a un fork viejo. Ejecuta
+> `git remote -v` y confirma `LuisUPY/RAGE-HACKATHON-PROYECT`.
 
 ### Run the demo
 
