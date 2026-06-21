@@ -181,14 +181,14 @@ class AdaptiveRedTeamLoop:
     # ------------------------------------------------------------------ #
 
     def run_campaign(self) -> RedTeamCampaignResult:
-        logger.info("Red-team campaign %s starting (%d iterations)", self._campaign_id, self.config.iterations)
+        logger.debug("Red-team campaign %s starting (%d iterations)", self._campaign_id, self.config.iterations)
 
         iter_count = 0
         obj_cycle = self.config.objectives * (self.config.iterations // len(self.config.objectives) + 1)
 
         for i in range(self.config.iterations):
             if self._stop.is_set():
-                logger.info("Stop signal — exiting after %d iterations", i)
+                logger.debug("Stop signal — exiting after %d iterations", i)
                 break
 
             # Respect pause between iterations
@@ -199,7 +199,7 @@ class AdaptiveRedTeamLoop:
             try:
                 new_model = self._model_q.get_nowait()
                 self._attacker.swap_model(new_model)
-                logger.info("Model swapped to %r for iteration %d", new_model, i + 1)
+                logger.debug("Model swapped to %r for iteration %d", new_model, i + 1)
             except queue.Empty:
                 pass
 
@@ -226,6 +226,7 @@ class AdaptiveRedTeamLoop:
             total_patched=self._total_patched,
         )
         self._save_results(campaign)
+        logger.debug("Campaign %s complete — %d bypasses", self._campaign_id, self._total_bypasses)
         return campaign
 
     # ------------------------------------------------------------------ #
@@ -245,7 +246,7 @@ class AdaptiveRedTeamLoop:
         last_signal: TurnSignal | None = None
         backtrack_count = 0
 
-        logger.info("Iteration %d/%d — objective=%s model=%s",
+        logger.debug("Iteration %d/%d — objective=%s model=%s",
                     iteration, self.config.iterations, objective, self._attacker.current_model)
 
         for turn_idx in range(self.config.max_turns):
@@ -334,7 +335,7 @@ class AdaptiveRedTeamLoop:
                 )
                 self._vuln_db.add(vuln)
                 vuln_id = vuln.id
-                logger.warning("BYPASS confirmed at turn %d — %s", bypass_turn, vuln_id)
+                logger.debug("BYPASS confirmed at turn %d — %s", bypass_turn, vuln_id)
                 break
 
         return IterationResult(
@@ -418,4 +419,4 @@ class AdaptiveRedTeamLoop:
         import json
         with open(path, "w", encoding="utf-8") as fh:
             json.dump(campaign.to_dict(), fh, ensure_ascii=False, indent=2)
-        logger.info("Campaign results saved to %s", path)
+        logger.debug("Campaign results saved to %s", path)

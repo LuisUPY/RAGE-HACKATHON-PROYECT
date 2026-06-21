@@ -9,10 +9,8 @@ Two launch modes:
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import queue
-import sys
 import threading
 from pathlib import Path
 
@@ -20,12 +18,31 @@ from rage_core.redteam.loop import AdaptiveRedTeamLoop, RedTeamConfig
 from rage_core.redteam.vulnerability_db import VulnerabilityDB
 from rage_core.training.paths import get_training_center_root
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
-    datefmt="%H:%M:%S",
-)
+# Logging is configured lazily in main() so interactive mode can redirect
+# it to a file before curses takes over the terminal.
 logger = logging.getLogger("redteam.cli")
+
+
+def _setup_logging(interactive: bool, log_dir: Path) -> None:
+    """
+    Headless → log to stderr as normal.
+    Interactive → log to a file so curses doesn't fight with log output.
+    """
+    if interactive:
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / "redteam.log"
+        handler: logging.Handler = logging.FileHandler(log_file, encoding="utf-8")
+    else:
+        handler = logging.StreamHandler()
+
+    handler.setFormatter(logging.Formatter(
+        "%(asctime)s [%(levelname)s] %(name)s — %(message)s",
+        datefmt="%H:%M:%S",
+    ))
+    root = logging.getLogger()
+    root.handlers.clear()
+    root.addHandler(handler)
+    root.setLevel(logging.INFO)
 
 
 # --------------------------------------------------------------------------- #
@@ -77,6 +94,14 @@ Examples:
 def main() -> int:
     args = parse_args()
 
+    tc_root = get_training_center_root()
+
+    # --- Configure logging before anything else ------------------------------
+    _setup_logging(
+        interactive=not args.no_interactive,
+        log_dir=tc_root / "logs",
+    )
+
     # --- Build config --------------------------------------------------------
     if args.no_interactive:
         config = _config_from_args(args)
@@ -86,15 +111,20 @@ def main() -> int:
             print("Aborted.")
             return 0
 
-    _print_config_banner(config)
+    # --- Pre-warm DefensePipeline (imports sklearn, avoids first-iter lag) ---
+    _prewarm_pipeline()
+
+    # Banner is only printed in headless mode — curses manages the screen
+    # in interactive mode and a print() here would corrupt the layout.
+    if args.no_interactive:
+        _print_config_banner(config)
 
     # --- Shared signals ------------------------------------------------------
     stop_event: threading.Event = threading.Event()
     pause_event: threading.Event = threading.Event()
     model_queue: queue.Queue[str] = queue.Queue()
-    status_queue: queue.Queue = queue.Queue(maxsize=64)
+    status_queue: queue.Queue = queue.Queue(maxsize=128)
 
-    tc_root = get_training_center_root()
     vuln_db = VulnerabilityDB(tc_root / "vulnerabilities" / "vuln_db.json")
 
     # --- Start loop in background thread ------------------------------------
@@ -114,7 +144,7 @@ def main() -> int:
         result_holder.append(result)
         stop_event.set()
 
-    loop_thread = threading.Thread(target=_run_loop, daemon=True)
+    loop_thread = threading.Thread(target=_run_loop, daemon=True, name="redteam-loop")
     loop_thread.start()
 
     # --- Live panel (main thread) -------------------------------------------
@@ -132,7 +162,7 @@ def main() -> int:
         )
         panel.run()
 
-    loop_thread.join(timeout=5)
+    loop_thread.join(timeout=10)
 
     # --- Summary ------------------------------------------------------------
     if result_holder:
@@ -159,6 +189,24 @@ def _config_from_args(args: argparse.Namespace) -> RedTeamConfig:
     base.auto_patch = args.auto_patch
     base.patch_and_retry = args.patch_and_retry
     return base
+
+
+def _prewarm_pipeline() -> None:
+    """Import and instantiate DefensePipeline once in the main thread.
+
+    This forces sklearn/TF-IDF to load before curses takes over the
+    terminal and before the background loop thread starts.  Without this,
+    the first iteration can stall for 30-90 seconds while sklearn
+    initialises its C extensions, which looks like a hang in the panel.
+    """
+    try:
+        from rage_core.layers.layer4_decision import DefensePipeline
+        from rage_core.models import ConversationState
+        _p = DefensePipeline()
+        _p.evaluate("warm-up", ConversationState())
+        logger.info("Pipeline pre-warmed successfully")
+    except Exception as exc:
+        logger.warning("Pipeline pre-warm failed (non-critical): %s", exc)
 
 
 def _config_from_menu() -> "RedTeamConfig | None":

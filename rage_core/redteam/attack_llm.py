@@ -240,7 +240,7 @@ class CrescendoAttackLLM:
         if new_model not in self.SUPPORTED_MODELS:
             logger.warning("Unknown model %r — keeping %r", new_model, self._model)
             return
-        logger.info("AttackLLM: swapping model %r → %r", self._model, new_model)
+        logger.debug("AttackLLM: swapping model %r → %r", self._model, new_model)
         self._model = new_model
 
     @property

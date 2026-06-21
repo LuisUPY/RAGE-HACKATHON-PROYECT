@@ -116,7 +116,7 @@ class PatchGenerator:
             try:
                 self._apply_kb_entries(proposal.kb_entries)
                 applied_any = True
-                logger.info("PatchGenerator: added %d KB entries", len(proposal.kb_entries))
+                logger.debug("PatchGenerator: added %d KB entries", len(proposal.kb_entries))
             except Exception as exc:
                 logger.warning("PatchGenerator: KB update failed: %s", exc)
 
@@ -131,7 +131,7 @@ class PatchGenerator:
 
         # 3. Threshold suggestions — log only; programmatic change requires restart
         for ts in proposal.threshold_suggestions:
-            logger.info(
+            logger.debug(
                 "PatchGenerator: threshold suggestion — %s: %s → %s (%s)",
                 ts["parameter"], ts["current"], ts["suggested"], ts["reason"],
             )
@@ -176,7 +176,7 @@ class PatchGenerator:
             with open(THREATS_KB, "w", encoding="utf-8") as fh:
                 json.dump(kb, fh, ensure_ascii=False, indent=2)
                 fh.write("\n")
-            logger.info("threats.json: added %d new entries", added)
+            logger.debug("threats.json: added %d new entries", added)
 
     @staticmethod
     def _apply_gateway_patterns(patterns: list[tuple[str, str]]) -> None:
@@ -187,4 +187,4 @@ class PatchGenerator:
             if label not in existing_labels:
                 compiled = re.compile(pattern_str, re.IGNORECASE)
                 gw_module._BLOCKED_SQL_PATTERNS.append((label, compiled))
-                logger.info("Gateway: hot-added block pattern %r", label)
+                logger.debug("Gateway: hot-added block pattern %r", label)
