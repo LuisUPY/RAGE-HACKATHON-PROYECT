@@ -1,6 +1,4 @@
-"""
-Single-scenario runner through RAGE DefensePipeline + SalesAgent.
-"""
+"""Single-scenario runner through RAGE DefensePipeline + SalesAgent."""
 
 from __future__ import annotations
 
@@ -8,12 +6,11 @@ import dataclasses
 from dataclasses import dataclass, field
 
 from rage_core.demo.agent import SalesAgent
-from rage_core.demo.attacks import Turn
 from rage_core.layers.layer4_decision import DefensePipeline
 from rage_core.metrics.evaluator import score_turn
 from rage_core.models import ActionStatus, Band, ConversationState, GatewayVerdict
 
-from .scenarios import ScenarioPack
+from rage_core.training.scenarios import ScenarioPack
 
 
 @dataclass

@@ -7,19 +7,26 @@ from collections import Counter
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from .campaign import CampaignResult
-    from .orchestrator import ScenarioRunResult
+from rage_core.training.paths import get_training_center_root
 
-RESULTS_DIR = Path(__file__).resolve().parent.parent / "results"
-INSIGHTS_DIR = Path(__file__).resolve().parent.parent / "insights"
+if TYPE_CHECKING:
+    from rage_core.training.campaign import CampaignResult
+    from rage_core.training.orchestrator import ScenarioRunResult
+
+
+def _results_dir() -> Path:
+    return get_training_center_root() / "results"
+
+
+def _insights_dir() -> Path:
+    return get_training_center_root() / "insights"
 
 
 def export_campaign_results(
     campaign: "CampaignResult",
     results_dir: Path | None = None,
 ) -> Path:
-    out_dir = results_dir or RESULTS_DIR
+    out_dir = results_dir or _results_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / f"{campaign.campaign_id}.json"
     with open(path, "w", encoding="utf-8") as fh:
@@ -32,7 +39,7 @@ def export_pending_insights(
     campaign_id: str,
     insights_dir: Path | None = None,
 ) -> Path:
-    out_dir = insights_dir or INSIGHTS_DIR
+    out_dir = insights_dir or _insights_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / f"pending_hardening_{campaign_id}.json"
     payload = {"source_campaign_id": campaign_id, **insights}

@@ -39,12 +39,12 @@ User turn → [L1: Regex] → [L2: RAG KB] → [L3: Semantic Filter] → [L4: De
 git clone https://github.com/LuisUPY/RAGE-HACKATHON-PROYECT.git
 cd RAGE-HACKATHON-PROYECT
 
-# Install with dev dependencies
+# Install project + register CLI scripts (rage-demo, rage-training, …)
 uv sync --extra dev
-
-# Or using dependency-groups (uv ≥ 0.4.27)
-uv sync
 ```
+
+> **Important:** run `uv sync` from the repo root before `uv run rage-training`.
+> That command installs the package and registers the console scripts.
 
 ### Run the demo
 
@@ -72,8 +72,16 @@ uv run pytest -v
 ### Run Crescendo red-teaming (Training-Center)
 
 ```bash
+uv sync --extra dev          # first time only
 uv run rage-training
-uv run python Training-Center/apply_insights.py
+uv run rage-training-apply
+```
+
+Fallback without uv scripts:
+
+```bash
+uv run python -m rage_core.training.cli
+uv run python -m rage_core.training.apply
 ```
 
 See [Training-Center/README.md](Training-Center/README.md) for ASR metrics and KB hardening loop.

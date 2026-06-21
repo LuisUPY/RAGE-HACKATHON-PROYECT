@@ -9,11 +9,9 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 from rage_core.demo.attacks import ALL_SCENARIOS, Turn
-
-SCENARIOS_DIR = Path(__file__).resolve().parent.parent / "scenarios"
+from rage_core.training.paths import get_training_center_root
 
 
 @dataclass
@@ -34,6 +32,10 @@ class ScenarioPack:
             "category": self.category,
             "tags": self.tags or [],
         }
+
+
+def _scenarios_dir() -> Path:
+    return get_training_center_root() / "scenarios"
 
 
 def _turn_from_json(raw: dict) -> Turn:
@@ -97,8 +99,9 @@ def load_all_scenarios(scenario_ids: list[str] | None = None) -> list[ScenarioPa
             )
         )
 
-    if SCENARIOS_DIR.exists():
-        for path in sorted(SCENARIOS_DIR.glob("*.json")):
+    scenarios_dir = _scenarios_dir()
+    if scenarios_dir.exists():
+        for path in sorted(scenarios_dir.glob("*.json")):
             pack = load_json_scenario(path)
             if scenario_ids is None or pack.id in scenario_ids:
                 if not any(p.id == pack.id for p in packs):

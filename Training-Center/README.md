@@ -1,29 +1,33 @@
 # RAGE Training-Center
 
-Centro de red-teaming automatizado: ejecuta escenarios **Crescendo** (arXiv [2404.01833](https://arxiv.org/html/2404.01833v3)) contra el stack completo de **RAGE** (`rage_core`).
+Centro de red-teaming automatizado: escenarios **Crescendo** contra el stack **RAGE** (`rage_core`).
 
-## Qué hace
-
-1. Corre escenarios multi-turno (incluye `crescendo_escalation` built-in) con y sin defensa.
-2. Mide **ASR** (Attack Success Rate) — ¿ejecutó SQL peligroso?
-3. Exporta JSON con telemetría por turno (L1–L4, gateway, session-risk EWMA).
-4. Genera **insights aplicables** → candidatos para `rage_core/kb/threats.json`.
-
-## Uso
+## Setup (después de clonar)
 
 ```bash
-# Campaña completa (4 escenarios built-in × defended + baseline)
-uv run rage-training
-
-# Solo Crescendo
-uv run rage-training --scenarios crescendo_escalation
-
-# Aplicar insights
-uv run python Training-Center/apply_insights.py
-uv run python Training-Center/apply_insights.py --apply-kb   # escribe en threats.json
+cd RAGE-HACKATHON-PROYECT
+uv sync --extra dev
 ```
 
-## Escenarios incluidos (desde rage_core)
+Sin este paso, `uv run rage-training` falla con `Failed to spawn: rage-training`.
+
+## Comandos
+
+```bash
+uv run rage-training
+uv run rage-training --scenarios crescendo_escalation
+uv run rage-training-apply
+uv run rage-training-apply --apply-kb
+```
+
+Alternativa directa:
+
+```bash
+uv run python -m rage_core.training.cli
+uv run python -m rage_core.training.apply
+```
+
+## Escenarios built-in
 
 | ID | Descripción |
 |----|-------------|
@@ -36,12 +40,12 @@ uv run python Training-Center/apply_insights.py --apply-kb   # escribe en threat
 
 | Archivo | Contenido |
 |---------|-----------|
-| `results/crescendo_*.json` | Campaña completa + ASR |
-| `insights/pending_hardening_*.json` | Recomendaciones |
-| `insights/applied/kb_candidates_latest.json` | Entradas para threats.json |
+| `Training-Center/results/crescendo_*.json` | ASR + telemetría por turno |
+| `Training-Center/insights/pending_hardening_*.json` | Recomendaciones |
+| `Training-Center/insights/applied/kb_candidates_latest.json` | Candidatos para `threats.json` |
 
-## Interpretación ASR
+## Interpretación
 
-- **Defended ASR = 0%** → RAGE contuvo todos los ataques (objetivo).
+- **Defended ASR = 0%** → RAGE contuvo los ataques.
 - **Baseline ASR > Defended ASR** → RAGE reduce vulnerabilidad.
-- Re-ejecutar tras hardening para medir mejora iterativa.
+- Re-ejecutar tras hardening para medir mejora.

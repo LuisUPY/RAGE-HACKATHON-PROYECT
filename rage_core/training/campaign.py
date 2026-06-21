@@ -1,15 +1,13 @@
-"""
-Batch campaign runner – defended vs baseline ASR aggregation.
-"""
+"""Batch campaign runner – defended vs baseline ASR aggregation."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 
-from .orchestrator import ScenarioOrchestrator, ScenarioRunResult
-from .reporter import build_actionable_insights
-from .scenarios import ScenarioPack, load_all_scenarios
+from rage_core.training.orchestrator import ScenarioOrchestrator, ScenarioRunResult
+from rage_core.training.reporter import build_actionable_insights
+from rage_core.training.scenarios import ScenarioPack, load_all_scenarios
 
 
 @dataclass
@@ -127,9 +125,7 @@ class TrainingCampaign:
             breakdown[key]["runs"] += 1
             if run.success:
                 breakdown[key]["successes"] += 1
-            breakdown[key]["asr"] = (
-                breakdown[key]["successes"] / breakdown[key]["runs"]
-            )
+            breakdown[key]["asr"] = breakdown[key]["successes"] / breakdown[key]["runs"]
 
         return CampaignSummary(
             total_runs=len(runs),
