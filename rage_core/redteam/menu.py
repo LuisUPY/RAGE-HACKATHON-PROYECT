@@ -112,8 +112,7 @@ class ConfigMenu:
         ]
 
         for idx, (fid, label) in enumerate(items):
-            field_idx = [f for f, _ in items].index((fid, label))
-            attr = curses.color_pair(1) if field_idx == self._cursor else 0
+            attr = curses.color_pair(1) if idx == self._cursor else 0
             try:
                 stdscr.addstr(row + idx, 2, label[:min(w - 3, 60)], attr)
             except curses.error:
