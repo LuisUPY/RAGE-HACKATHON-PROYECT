@@ -82,6 +82,19 @@ uv run rage-demo --no-plot
 ./mac-ollama/scripts/run-redteam.sh --unlimited --severity critical
 ```
 
+## Opcion C: Solo `qwen2:7b` (un modelo, sin mas descargas)
+
+Si ya tienes `qwen2:7b` en Ollama y quieres evitar bajar `3b` u otros modelos:
+
+```bash
+chmod +x mac-ollama/scripts/run-qwen2-7b.sh
+./mac-ollama/scripts/run-qwen2-7b.sh              # chat
+./mac-ollama/scripts/run-qwen2-7b.sh redteam --severity high --iterations 5
+./mac-ollama/scripts/run-qwen2-7b.sh test-ollama  # probar Ollama sin RAGE
+```
+
+Perfil: [`profiles/qwen2-7b.env`](profiles/qwen2-7b.env) — chat, red-team y juez L3 usan el mismo modelo. Solo descarga si `qwen2:7b` no esta en `ollama list`.
+
 ## Comandos disponibles
 
 | Script | Que hace |
