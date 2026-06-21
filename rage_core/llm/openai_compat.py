@@ -20,9 +20,11 @@ assistant — e.g. a small Nemotron Nano 8B judges while a 70B model responds.
 from __future__ import annotations
 
 import os
+import re
 from typing import Any
 
 _NIM_BASE = "https://integrate.api.nvidia.com/v1"
+_INVISIBLE_CHARS_RE = re.compile(r"[\r\n\t\u200b\uFEFF\u00a0]")
 
 
 def get_nim_env_hint() -> str:
@@ -48,10 +50,20 @@ def llm_judge_enabled() -> bool:
     return bool(os.environ.get("OPENAI_API_KEY"))
 
 
-def _clean_key(value: str | None) -> str:
+def sanitize_api_key(value: str | None) -> str:
+    """Normalize pasted API keys (quotes, line breaks, Bearer prefix, invisible chars)."""
     if not value:
         return ""
-    return value.strip().strip('"').strip("'")
+    key = value.strip()
+    key = _INVISIBLE_CHARS_RE.sub("", key)
+    key = key.strip().strip('"').strip("'")
+    if key.lower().startswith("bearer "):
+        key = key[7:].strip().strip('"').strip("'")
+    return key
+
+
+def _clean_key(value: str | None) -> str:
+    return sanitize_api_key(value)
 
 
 def get_llm_client() -> Any | None:
@@ -130,6 +142,11 @@ def diagnose_llm_setup() -> str:
     openai_key = _clean_key(os.environ.get("OPENAI_API_KEY"))
     base = os.environ.get("RAGE_LLM_BASE_URL", "").strip()
 
+    if base and llm_key and not llm_key.startswith("nvapi-"):
+        return (
+            "La clave NVIDIA no tiene formato nvapi-...\n"
+            "  Debe generarse en https://build.nvidia.com (no en ngc.nvidia.com)."
+        )
     if base and not llm_key:
         return (
             "Hay RAGE_LLM_BASE_URL pero falta RAGE_LLM_API_KEY.\n"
@@ -142,3 +159,81 @@ def diagnose_llm_setup() -> str:
             "  O usa una clave OpenAI (sk-...)."
         )
     return "Configuración LLM incompleta — revisa las variables de entorno."
+
+
+def format_llm_api_error(exc: Exception, *, model: str | None = None) -> str:
+    """Translate common LLM HTTP errors into actionable Spanish hints."""
+    text = str(exc).lower()
+    model_hint = f"\n  Modelo usado: {model}" if model else ""
+
+    if any(token in text for token in ("401", "unauthorized", "authentication failed")):
+        return (
+            f"Error 401 — NVIDIA rechazó la autenticación.{model_hint}\n\n"
+            "Comprueba:\n"
+            "  1. Clave de https://build.nvidia.com (NO de ngc.nvidia.com)\n"
+            "  2. Generarla en la página del modelo → «Get API Key»\n"
+            "  3. Debe empezar por nvapi- (sin espacios ni comillas al pegar)\n"
+            "  4. Aceptar los términos del modelo en build.nvidia.com\n"
+            "  5. Rotar la clave en build.nvidia.com/settings/api-keys si es antigua\n\n"
+            f"Detalle técnico: {exc}"
+        )
+
+    if "403" in text or "forbidden" in text:
+        return (
+            f"Error 403 — la clave no tiene permiso «Public API Endpoints».{model_hint}\n\n"
+            "Crea una clave nueva en https://build.nvidia.com:\n"
+            "  • Entra a un modelo (ej. Llama 3.1 8B)\n"
+            "  • Pulsa «Get API Key» y acepta términos\n"
+            "  • No uses claves del portal NGC\n\n"
+            f"Detalle técnico: {exc}"
+        )
+
+    if "404" in text and model:
+        return (
+            f"Modelo no disponible: {model}\n"
+            "  Prueba: uv run rage-chat-support --model meta/llama-3.1-8b-instruct\n"
+            f"Detalle técnico: {exc}"
+        )
+
+    return f"[ERROR] LLM request failed: {exc}"
+
+
+def verify_llm_connection(
+    *,
+    model: str | None = None,
+    judge_model: str | None = None,
+) -> tuple[bool, str]:
+    """Ping assistant (and optional judge) before starting interactive chat."""
+    model = model or get_llm_model()
+    client = get_llm_client()
+    if client is None:
+        return False, diagnose_llm_setup()
+
+    try:
+        client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": "ping"}],
+            max_tokens=1,
+            temperature=0,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return False, format_llm_api_error(exc, model=model)
+
+    if judge_model and llm_judge_enabled():
+        judge_client = get_judge_client()
+        if judge_client is None:
+            return False, "Juez LLM activo pero no hay cliente configurado."
+        try:
+            judge_client.chat.completions.create(
+                model=judge_model,
+                messages=[{"role": "user", "content": "Reply NO"}],
+                max_tokens=1,
+                temperature=0,
+            )
+        except Exception as exc:  # noqa: BLE001
+            return False, (
+                "El asistente respondió, pero el juez LLM falló:\n"
+                + format_llm_api_error(exc, model=judge_model)
+            )
+
+    return True, ""

@@ -4,6 +4,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from rage_core.llm.openai_compat import sanitize_api_key
+
 _PLACEHOLDER_MARKERS = ("PEGAR_AQUI", "nvapi-...", "sk-...")
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -39,7 +41,7 @@ def load_env_file(path: Path | None = None) -> bool:
 
 def bootstrap_nvidia_master_key(*, force: bool = False) -> None:
     """Copy RAGE_NVIDIA_API_KEY into RAGE_LLM_API_KEY and RAGE_JUDGE_API_KEY if set."""
-    master = _clean_key(os.environ.get("RAGE_NVIDIA_API_KEY"))
+    master = sanitize_api_key(os.environ.get("RAGE_NVIDIA_API_KEY"))
     if not force and _is_placeholder(master):
         return
     if not master:
@@ -54,9 +56,7 @@ def bootstrap_nvidia_master_key(*, force: bool = False) -> None:
 
 
 def _clean_key(value: str | None) -> str:
-    if not value:
-        return ""
-    return value.strip().strip('"').strip("'")
+    return sanitize_api_key(value)
 
 
 def prompt_session_api_keys() -> bool:
@@ -80,21 +80,24 @@ def prompt_session_api_keys() -> bool:
     print("  Obtén clave NVIDIA: https://build.nvidia.com → API Keys")
     print("=" * 62)
 
-    nv_key = _clean_key(input("\nNVIDIA API key (nvapi-...): "))
+    nv_key = sanitize_api_key(input("\nNVIDIA API key (nvapi-...): "))
     if nv_key:
         if _is_placeholder(nv_key):
             print("\nEsa clave parece un placeholder del template — pega tu clave real nvapi-...")
             return False
+        if not nv_key.startswith("nvapi-"):
+            print("\nLa clave NVIDIA debe empezar por nvapi- (desde build.nvidia.com, no ngc.nvidia.com).")
+            return False
         os.environ["RAGE_NVIDIA_API_KEY"] = nv_key
         bootstrap_nvidia_master_key(force=True)
-        judge_key = _clean_key(input("Juez API key (Enter = misma clave): "))
+        judge_key = sanitize_api_key(input("Juez API key (Enter = misma clave): "))
         if judge_key:
             os.environ["RAGE_JUDGE_API_KEY"] = judge_key
         os.environ["RAGE_USE_LLM_JUDGE"] = "1"
         return True
 
     print("\n¿Usar OpenAI en su lugar?")
-    oa_key = _clean_key(input("OpenAI API key (sk-... o Enter para cancelar): "))
+    oa_key = sanitize_api_key(input("OpenAI API key (sk-... o Enter para cancelar): "))
     if oa_key:
         if _is_placeholder(oa_key):
             print("\nEsa clave parece un placeholder del template — pega tu clave real sk-...")
