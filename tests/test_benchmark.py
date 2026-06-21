@@ -164,12 +164,19 @@ class TestComputeMetrics:
         assert 0.0 <= m.f1 <= 1.0
 
     def test_l1_catches_all_kb_cases(self) -> None:
-        """L1 regex rules should catch most KB cases (high recall on known attacks)."""
+        """L1 regex rules should catch all KB attack entries."""
         cases = load_dataset(include_kb=True, include_scenarios=False)
         results = run_benchmark(cases, use_judge=False)
         m = compute_metrics(results)
-        # KB cases are all attacks — L1 should catch a meaningful portion
-        assert m.recall >= 0.3, f"L1 recall on KB too low: {m.recall:.2f}"
+        assert m.recall == 1.0, f"L1 recall on KB too low: {m.recall:.2f}"
+
+    def test_full_benchmark_meets_accuracy_target(self) -> None:
+        """Full dataset should reach ≥80% accuracy with L1 + L2 (no judge API needed)."""
+        cases = load_dataset()
+        results = run_benchmark(cases, use_judge=False)
+        m = compute_metrics(results)
+        assert m.accuracy >= 0.80, f"Benchmark accuracy too low: {m.accuracy:.2%}"
+        assert m.fp == 0, f"Must not block benign cases (got {m.fp} FP)"
 
     def test_no_false_positives_on_benign_turns(self) -> None:
         """L1 must not block benign scenario turns."""

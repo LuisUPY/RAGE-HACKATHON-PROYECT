@@ -6,6 +6,7 @@ Verdict logic
 ─────────────
   RAGE+Judge says ATTACK when:
     • signal.layer1.matched  — deterministic L1 signature matched (e.g. DROP TABLE)
+    • signal.layer2.score ≥ 0.75 with a KB match — known attack paraphrase (L2 RAG)
     • signal.layer3.llm_flagged — the LLM judge confirmed escalation after drift
 
   RAGE+Judge says BENIGN otherwise.
@@ -22,6 +23,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from rage_core.benchmark.dataset import BenchmarkCase
+from rage_core.layers.access_policy import is_attack_verdict
 from rage_core.layers.layer4_decision import DefensePipeline
 from rage_core.models import ConversationState, TurnSignal
 
@@ -115,12 +117,8 @@ def run_benchmark(
 
 
 def _decide(signal: TurnSignal, use_judge: bool) -> bool:
-    """Return True (attack) when L1 or (when use_judge) the LLM judge fired."""
-    if signal.layer1.matched:
-        return True
-    if use_judge and signal.layer3.llm_flagged:
-        return True
-    return False
+    """Return True (attack) when L1, high-confidence L2, or the LLM judge fired."""
+    return is_attack_verdict(signal, use_judge=use_judge)
 
 
 def compute_metrics(results: list[CaseResult]) -> BenchmarkMetrics:
