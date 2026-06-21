@@ -66,6 +66,11 @@ _RAW_RULES: list[tuple[str, str, str]] = [
     ("L1-037", "Leetspeak injection markers", r"1gn0r3|pr3v10u5|1n5truct10n"),
     ("L1-038", "Crescendo — combine prior response", r"based\s+on\s+your\s+previous\s+response.*combine"),
     ("L1-039", "Crescendo — format continuation", r"using\s+the\s+format\s+you\s+described\s+earlier"),
+    ("L1-040", "SQL TRUNCATE TABLE", r"\bTRUNCATE\s+TABLE\b"),
+    ("L1-041", "SQL mass DELETE tautology", r"DELETE\s+FROM\s+\w+\s+WHERE\s+['\"]?1['\"]?\s*=\s*['\"]?1"),
+    ("L1-042", "UNION SELECT injection", r"\bUNION\s+SELECT\b"),
+    ("L1-043", "Disable safety restrictions", r"disable\s+(?:all\s+)?safety\s+restrictions"),
+    ("L1-044", "Schema/credential enumeration", r"(?:every\s+table\s+and\s+column|system\s+tables\s+and\s+credentials)"),
 ]
 
 _COMPILED_RULES: list[_Rule] = [

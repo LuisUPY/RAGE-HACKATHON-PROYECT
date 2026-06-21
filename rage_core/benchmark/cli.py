@@ -10,6 +10,9 @@ Usage:
     uv run rage-bench --scenarios-only    # only scenario turns
     uv run rage-bench --filter fp         # show only False Positives
     uv run rage-bench --filter fn         # show only False Negatives (missed attacks)
+    uv run rage-bench --by-category       # breakdown por categoría (comparar familias)
+    uv run rage-bench --attacks-kb-only   # solo threats.json (58 ataques)
+    uv run rage-bench --benign-kb-only    # solo benign.json (20 benignos)
 
 Exit code: 0 if accuracy >= 80%, 1 otherwise.
 """
@@ -20,7 +23,13 @@ import random
 import sys
 
 from rage_core.benchmark.dataset import BenchmarkCase, dataset_summary, load_dataset
-from rage_core.benchmark.evaluator import BenchmarkMetrics, CaseResult, compute_metrics, run_benchmark
+from rage_core.benchmark.evaluator import (
+    BenchmarkMetrics,
+    CaseResult,
+    compute_category_metrics,
+    compute_metrics,
+    run_benchmark,
+)
 
 
 # --------------------------------------------------------------------------- #
@@ -103,6 +112,20 @@ def _print_metrics(m: BenchmarkMetrics, use_judge: bool) -> None:
     print(f"  FP rate    : {m.false_positive_rate * 100:.1f}%  (falsos positivos / total benignos)")
     if use_judge:
         print(f"  Juez +catch: {m.judge_contribution}  (ataques que solo el juez detectó)")
+    print(_SEP)
+
+
+def _print_category_metrics(by_category: dict[str, BenchmarkMetrics]) -> None:
+    print()
+    print("  Desglose por categoría:")
+    print(f"  {'Categoría':<28} {'N':>4}  {'Acc':>6}  {'Rec':>6}  {'FP':>3}  {'FN':>3}")
+    print("  " + "─" * 58)
+    for category, m in by_category.items():
+        print(
+            f"  {category:<28} {m.total:>4}  "
+            f"{m.accuracy * 100:>5.1f}%  {m.recall * 100:>5.1f}%  "
+            f"{m.fp:>3}  {m.fn:>3}"
+        )
     print(_SEP)
 
 
@@ -338,7 +361,22 @@ def main() -> int:
     parser.add_argument(
         "--kb-only",
         action="store_true",
-        help="Usar solo los 33 casos de la KB (no los turnos de escenarios)",
+        help="Usar solo la KB (threats.json + benign.json), sin escenarios",
+    )
+    parser.add_argument(
+        "--attacks-kb-only",
+        action="store_true",
+        help="Usar solo threats.json (ataques KB, sin benignos ni escenarios)",
+    )
+    parser.add_argument(
+        "--benign-kb-only",
+        action="store_true",
+        help="Usar solo benign.json (benignos KB, sin ataques ni escenarios)",
+    )
+    parser.add_argument(
+        "--by-category",
+        action="store_true",
+        help="Mostrar métricas desglosadas por categoría",
     )
     parser.add_argument(
         "--scenarios-only",
@@ -363,11 +401,18 @@ def main() -> int:
         )
 
     use_judge = not args.no_judge
-    include_kb = not args.scenarios_only
-    include_scenarios = not args.kb_only
+    include_kb = not args.scenarios_only and not args.benign_kb_only
+    include_benign_kb = not args.scenarios_only and not args.attacks_kb_only
+    include_scenarios = (
+        not args.kb_only and not args.attacks_kb_only and not args.benign_kb_only
+    )
 
     # Load dataset
-    cases = load_dataset(include_kb=include_kb, include_scenarios=include_scenarios)
+    cases = load_dataset(
+        include_kb=include_kb,
+        include_benign_kb=include_benign_kb,
+        include_scenarios=include_scenarios,
+    )
     if not cases:
         print("ERROR: dataset vacío.", file=sys.stderr)
         return 1
@@ -378,6 +423,9 @@ def main() -> int:
     print("  RAGE+Judge Benchmark")
     print(f"  Dataset: {summary['total']} casos  "
           f"({summary['attacks']} ataques / {summary['benign']} benignos)")
+    if summary.get("categories"):
+        cat_count = len(summary["categories"])
+        print(f"  Categorías : {cat_count} familias distintas")
     print(f"  Juez LLM: {'ACTIVO' if use_judge else 'DESACTIVADO (solo L1)'}")
     if use_judge:
         from rage_core.llm.openai_compat import get_judge_model, llm_judge_enabled
@@ -410,6 +458,8 @@ def main() -> int:
     # Metrics
     metrics = compute_metrics(results)
     _print_metrics(metrics, use_judge)
+    if args.by_category:
+        _print_category_metrics(compute_category_metrics(results))
 
     # Exit code
     return 0 if metrics.accuracy >= 0.80 else 1

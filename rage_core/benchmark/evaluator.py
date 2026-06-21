@@ -159,3 +159,12 @@ def compute_metrics(results: list[CaseResult]) -> BenchmarkMetrics:
         false_positive_rate=round(fpr, 4),
         judge_contribution=judge_contribution,
     )
+
+
+def compute_category_metrics(results: list[CaseResult]) -> dict[str, BenchmarkMetrics]:
+    """Compute metrics grouped by case category for side-by-side comparison."""
+    by_category: dict[str, list[CaseResult]] = {}
+    for result in results:
+        cat = result.case.category
+        by_category.setdefault(cat, []).append(result)
+    return {cat: compute_metrics(cat_results) for cat, cat_results in sorted(by_category.items())}

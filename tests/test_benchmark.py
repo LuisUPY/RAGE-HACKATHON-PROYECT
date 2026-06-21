@@ -7,6 +7,7 @@ from rage_core.benchmark.dataset import BenchmarkCase, dataset_summary, load_dat
 from rage_core.benchmark.evaluator import (
     CaseResult,
     BenchmarkMetrics,
+    compute_category_metrics,
     compute_metrics,
     run_benchmark,
 )
@@ -19,16 +20,22 @@ from rage_core.models import Band, Layer1Signal, Layer2Signal, Layer3Signal, Tur
 
 class TestDataset:
     def test_loads_kb_cases(self) -> None:
-        cases = load_dataset(include_kb=True, include_scenarios=False)
-        assert len(cases) >= 33, "KB has 33 entries — all must be loaded"
+        cases = load_dataset(include_kb=True, include_benign_kb=False, include_scenarios=False)
+        assert len(cases) >= 58, "KB attacks must be loaded from threats.json"
         assert all(c.source == "kb" for c in cases)
 
+    def test_loads_benign_kb_cases(self) -> None:
+        cases = load_dataset(include_kb=False, include_benign_kb=True, include_scenarios=False)
+        assert len(cases) >= 20, "Benign KB must be loaded from benign.json"
+        assert all(c.source == "kb:benign" for c in cases)
+        assert all(not c.is_attack for c in cases)
+
     def test_all_kb_cases_are_attacks(self) -> None:
-        cases = load_dataset(include_kb=True, include_scenarios=False)
+        cases = load_dataset(include_kb=True, include_benign_kb=False, include_scenarios=False)
         assert all(c.is_attack for c in cases), "Every KB entry is a known attack"
 
     def test_loads_scenario_cases(self) -> None:
-        cases = load_dataset(include_kb=False, include_scenarios=True)
+        cases = load_dataset(include_kb=False, include_benign_kb=False, include_scenarios=True)
         assert len(cases) > 0
         assert all(c.source.startswith("scenario:") for c in cases)
 
@@ -177,6 +184,13 @@ class TestComputeMetrics:
         m = compute_metrics(results)
         assert m.accuracy >= 0.80, f"Benchmark accuracy too low: {m.accuracy:.2%}"
         assert m.fp == 0, f"Must not block benign cases (got {m.fp} FP)"
+        assert len(cases) >= 100, "Expanded dataset should have 100+ labeled cases"
+
+    def test_category_metrics_cover_all_cases(self) -> None:
+        cases = load_dataset()
+        results = run_benchmark(cases, use_judge=False)
+        by_cat = compute_category_metrics(results)
+        assert sum(m.total for m in by_cat.values()) == len(cases)
 
     def test_no_false_positives_on_benign_turns(self) -> None:
         """L1 must not block benign scenario turns."""
