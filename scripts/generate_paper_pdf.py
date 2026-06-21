@@ -16,6 +16,10 @@ FONT_MONO = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
 
 
 class PaperPDF(FPDF):
+    def __init__(self, header_title: str) -> None:
+        super().__init__()
+        self._header_title = header_title
+
     def header(self) -> None:
         if self.page_no() == 1:
             return
@@ -24,7 +28,7 @@ class PaperPDF(FPDF):
         self.cell(
             0,
             6,
-            "RAGE — Robust Agentic Security Gateway for Text-to-SQL",
+            self._header_title,
             align="C",
             new_x="LMARGIN",
             new_y="NEXT",
@@ -100,8 +104,10 @@ def _strip_md_inline(text: str) -> str:
     return text.strip()
 
 
-def md_to_pdf(md_path: Path, pdf_path: Path) -> None:
-    pdf = PaperPDF()
+def md_to_pdf(md_path: Path, pdf_path: Path, header_title: str | None = None) -> None:
+    if header_title is None:
+        header_title = "RAGE — Robust Agentic Security Gateway for Text-to-SQL"
+    pdf = PaperPDF(header_title=header_title)
     pdf.set_auto_page_break(auto=True, margin=18)
     pdf.add_font("DejaVu", "", FONT_REGULAR)
     pdf.add_font("DejaVu", "B", FONT_BOLD)
@@ -200,17 +206,45 @@ def md_to_pdf(md_path: Path, pdf_path: Path) -> None:
     print(f"PDF generated: {pdf_path} ({pdf_path.stat().st_size:,} bytes)")
 
 
+_PAPER_VARIANTS: list[tuple[Path, Path, str]] = [
+    (
+        REPO_ROOT / "RAGE_paper.md",
+        REPO_ROOT / "RAGE_paper.pdf",
+        "RAGE — Robust Agentic Security Gateway for Text-to-SQL",
+    ),
+    (
+        REPO_ROOT / "RAGE_paper.md",
+        REPO_ROOT / "Documentation" / "RAGE-Paper.pdf",
+        "RAGE — Robust Agentic Security Gateway for Text-to-SQL",
+    ),
+    (
+        REPO_ROOT / "RAGE_paper_es.md",
+        REPO_ROOT / "RAGE_paper_es.pdf",
+        "RAGE — Gateway de Seguridad Agéntica para Text-to-SQL",
+    ),
+]
+
+
 def main() -> int:
-    md = REPO_ROOT / "RAGE_paper.md"
-    pdf = REPO_ROOT / "Documentation" / "RAGE-Paper.pdf"
-    if len(sys.argv) > 1:
+    if len(sys.argv) > 1 and sys.argv[1] != "--all":
         md = Path(sys.argv[1])
-    if len(sys.argv) > 2:
-        pdf = Path(sys.argv[2])
-    if not md.exists():
-        print(f"Not found: {md}", file=sys.stderr)
-        return 1
-    md_to_pdf(md, pdf)
+        pdf = REPO_ROOT / "RAGE_paper.pdf"
+        header = "RAGE — Robust Agentic Security Gateway for Text-to-SQL"
+        if len(sys.argv) > 2:
+            pdf = Path(sys.argv[2])
+        if len(sys.argv) > 3:
+            header = sys.argv[3]
+        if not md.exists():
+            print(f"Not found: {md}", file=sys.stderr)
+            return 1
+        md_to_pdf(md, pdf, header)
+        return 0
+
+    for md, pdf, header in _PAPER_VARIANTS:
+        if not md.exists():
+            print(f"Not found: {md}", file=sys.stderr)
+            return 1
+        md_to_pdf(md, pdf, header)
     return 0
 
 

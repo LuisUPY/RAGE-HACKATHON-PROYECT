@@ -230,6 +230,24 @@ tests/                   # pytest suite
 Documentation/           # reference documents
 ```
 
+## Technical Paper
+
+Full write-up of the four-layer architecture, Crescendo threat model, AUC-D/TRI metrics, and Training-Center infrastructure (Global South AI Safety Hackathon, June 2026):
+
+| Language | Markdown | PDF |
+|----------|----------|-----|
+| English | [RAGE_paper.md](RAGE_paper.md) | [RAGE_paper.pdf](RAGE_paper.pdf) · [Documentation/RAGE-Paper.pdf](Documentation/RAGE-Paper.pdf) |
+| Español | [RAGE_paper_es.md](RAGE_paper_es.md) | [RAGE_paper_es.pdf](RAGE_paper_es.pdf) |
+
+Regenerate PDFs after editing the Markdown sources:
+
+```bash
+pip install fpdf2
+python3 scripts/generate_paper_pdf.py --all
+```
+
+Architecture diagram: [Documentation/RAGE-Arquitectura-v2.html](Documentation/RAGE-Arquitectura-v2.html)
+
 ## Security Notes
 
 - The threat KB and intent summaries are treated as **untrusted content** (OWASP LLM08). They are sanitized before storage and never concatenated into privileged system prompts.
