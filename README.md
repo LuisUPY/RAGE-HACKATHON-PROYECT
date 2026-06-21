@@ -108,6 +108,10 @@ See [Training-Center/README.md](Training-Center/README.md) for ASR metrics and K
 
 Ver [windows-ollama/README.md](windows-ollama/README.md) para setup con NVIDIA RTX 5050, scripts PowerShell y `rage-chat`.
 
+### Mac M1 + Ollama (8 GB RAM)
+
+Ver [mac-ollama/README.md](mac-ollama/README.md) para setup en Apple Silicon, scripts bash y preset `m1-8gb.env`.
+
 ### Lint
 
 ```bash
