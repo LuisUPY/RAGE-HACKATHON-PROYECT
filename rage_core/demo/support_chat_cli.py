@@ -24,6 +24,7 @@ import argparse
 import sys
 
 from rage_core.demo.support_agent import LocalSupportAgent
+from rage_core.config.env_loader import ensure_env_loaded, env_configured
 from rage_core.llm.openai_compat import (
     get_judge_model,
     get_llm_client,
@@ -68,14 +69,18 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    ensure_env_loaded()
+    ok, hint = env_configured()
+    if not ok:
+        print(hint, file=sys.stderr)
+        return 1
+
     if not has_llm_backend():
         print(
             "No hay backend LLM configurado.\n\n"
-            "  cp .env.example .env\n"
-            "  # Rellena RAGE_LLM_API_KEY y RAGE_JUDGE_API_KEY\n"
-            "  source .env\n"
-            "  export RAGE_USE_LLM_JUDGE=1\n\n"
-            "  uv run rage-chat-support",
+            f"{hint}\n\n"
+            "  ./scripts/setup-env.sh\n"
+            "  ./scripts/run-support-chat.sh",
             file=sys.stderr,
         )
         return 1
