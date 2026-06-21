@@ -32,7 +32,6 @@ dev = [
 
 [project.scripts]
 rage-demo            = "rage_core.demo.cli:main"
-rage-bench           = "rage_core.metrics.cli:main"
 rage-training        = "rage_core.training.cli:main"
 rage-training-apply  = "rage_core.training.apply:main"
 rage-redteam         = "rage_core.redteam.cli:main"

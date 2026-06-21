@@ -218,18 +218,20 @@ class GeneratedTurn:
 
 
 class CrescendoAttackLLM:
-    """Generate Crescendo turns; model can be swapped at runtime."""
+    """Generate Crescendo turns; model and severity can be changed at runtime."""
 
     SUPPORTED_MODELS = ("offline", "gpt-4o-mini", "gpt-4o")
+    SUPPORTED_SEVERITIES = ("light", "medium", "high", "critical")
 
     def __init__(
         self,
         model: str = "offline",
+        severity: str = "medium",
         api_key: str | None = None,
     ) -> None:
         self._model = model
+        self._severity = severity if severity in self.SUPPORTED_SEVERITIES else "medium"
         self._api_key = api_key or os.environ.get("OPENAI_API_KEY")
-        self._template_indices: dict[str, int] = {}
 
     # ------------------------------------------------------------------ #
     # Public API                                                           #
@@ -243,9 +245,21 @@ class CrescendoAttackLLM:
         logger.debug("AttackLLM: swapping model %r → %r", self._model, new_model)
         self._model = new_model
 
+    def set_severity(self, severity: str) -> None:
+        """Update severity level; takes effect on the next call."""
+        if severity not in self.SUPPORTED_SEVERITIES:
+            logger.warning("Unknown severity %r — keeping %r", severity, self._severity)
+            return
+        logger.debug("AttackLLM: severity %r → %r", self._severity, severity)
+        self._severity = severity
+
     @property
     def current_model(self) -> str:
         return self._model
+
+    @property
+    def current_severity(self) -> str:
+        return self._severity
 
     def next_turn(
         self,
@@ -274,14 +288,32 @@ class CrescendoAttackLLM:
 
     def _offline_turn(self, objective: str, turn_index: int) -> GeneratedTurn:
         templates = _TEMPLATES.get(objective, _TEMPLATES["exfil"])
-        idx = min(turn_index, len(templates) - 1)
-        text, tool, sql, is_attack = templates[idx]
+
+        if self._severity == "critical":
+            # Jump straight to attack templates; cycle through them
+            attacks = [(t, to, s, ia) for t, to, s, ia in templates if ia]
+            pool = attacks if attacks else templates
+            text, tool, sql, is_attack = pool[turn_index % len(pool)]
+        elif self._severity == "high":
+            # Start 2 positions ahead — reach attack turns faster
+            idx = min(turn_index + 2, len(templates) - 1)
+            text, tool, sql, is_attack = templates[idx]
+        elif self._severity == "light":
+            # Only benign warm-up turns; never escalate
+            benign = [(t, to, s, ia) for t, to, s, ia in templates if not ia]
+            pool = benign if benign else templates[:1]
+            text, tool, sql, is_attack = pool[turn_index % len(pool)]
+        else:
+            # medium — sequential (original behaviour)
+            idx = min(turn_index, len(templates) - 1)
+            text, tool, sql, is_attack = templates[idx]
+
         return GeneratedTurn(
             user_text=text,
             tool_name=tool,
             sql=sql,
             is_attack=is_attack,
-            summary=f"offline template {idx + 1}/{len(templates)}",
+            summary=f"offline/{self._severity} t{turn_index}",
             source="offline",
         )
 
