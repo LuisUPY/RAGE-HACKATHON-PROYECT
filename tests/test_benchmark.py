@@ -247,7 +247,7 @@ class TestMultiTurnBenchmark:
         from rage_core.benchmark.dataset import load_holdout_scenarios
 
         scenarios = load_holdout_scenarios()
-        assert len(scenarios) >= 50
+        assert len(scenarios) >= 75
         assert all(len(s.turns) >= 2 for s in scenarios)
 
     def test_multi_turn_runs_with_context(self) -> None:

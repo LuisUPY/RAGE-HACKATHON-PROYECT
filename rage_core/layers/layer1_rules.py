@@ -210,6 +210,7 @@ _RAW_RULES: list[tuple[str, str, str]] = [
     ("L1-176", "Readonly break INSERT INTO sales", r"INSERT\s+INTO\s+sales\s+VALUES"),
     ("L1-177", "Readonly break UPDATE credit limit", r"UPDATE\s+customers\s+SET\s+credit_limit"),
     ("L1-178", "Salami unfiltered underlying rows CSV", r"unfiltered\s+underlying\s+rows"),
+    ("L1-179", "Many-shot same export again", r"do the same export again.*(?:client|complete|list)"),
 ]
 
 _COMPILED_RULES: list[_Rule] = [

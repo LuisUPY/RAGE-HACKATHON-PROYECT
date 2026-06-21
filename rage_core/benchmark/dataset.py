@@ -8,8 +8,8 @@ Sources:
   4. Holdout research (rage_core/kb/holdout_research.json) — OWASP LLM01:2025,
      AITG-APP-01, Crescendo (arXiv:2404.01833), and agent-tool abuse cases.
   5. Attack scenarios (rage_core/demo/attacks.py) — multi-turn scenarios.
-  6. Holdout scenarios (holdout_scenarios.json + holdout_scenarios_extended.json)
-     — open-world multi-turn (Crescendo, salami slicing, skeleton key, etc.).
+  6. Holdout scenarios (holdout_scenarios.json + extended + comparison JSON files)
+     — open-world multi-turn (Crescendo, salami slicing, comparison variants, etc.).
 
 The KB entries are single-turn probe texts with ground-truth labels.
 Scenario turns capture realistic multi-turn structure (Crescendo, tool chains, etc.).
@@ -27,6 +27,9 @@ _HOLDOUT_RESEARCH_PATH = Path(__file__).parent.parent / "kb" / "holdout_research
 _HOLDOUT_SCENARIOS_PATH = Path(__file__).parent.parent / "kb" / "holdout_scenarios.json"
 _HOLDOUT_SCENARIOS_EXTENDED_PATH = (
     Path(__file__).parent.parent / "kb" / "holdout_scenarios_extended.json"
+)
+_HOLDOUT_SCENARIOS_COMPARISON_PATH = (
+    Path(__file__).parent.parent / "kb" / "holdout_scenarios_comparison.json"
 )
 
 
@@ -194,8 +197,12 @@ def _parse_holdout_scenario_entries(
 
 
 def _load_holdout_scenarios() -> list[BenchmarkScenario]:
-    """Load multi-turn holdout scenarios from base + extended JSON files."""
-    paths = [_HOLDOUT_SCENARIOS_PATH, _HOLDOUT_SCENARIOS_EXTENDED_PATH]
+    """Load multi-turn holdout scenarios from base + extended + comparison JSON."""
+    paths = [
+        _HOLDOUT_SCENARIOS_PATH,
+        _HOLDOUT_SCENARIOS_EXTENDED_PATH,
+        _HOLDOUT_SCENARIOS_COMPARISON_PATH,
+    ]
     if not any(p.exists() for p in paths):
         return []
 
