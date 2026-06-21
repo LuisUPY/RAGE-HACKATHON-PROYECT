@@ -44,7 +44,11 @@ class Layer3Signal:
     drift: float           # 0.0 – 1.0  (cosine distance from previous turn embedding)
     suspicious: bool       # drift > threshold
     llm_flagged: bool      # LLM judge result (only populated when suspicious=True)
-    intent_summary: str = ""  # mini-summary of current turn (untrusted — sanitized)
+    intent_summary: str = ""   # mini-summary of current turn (untrusted — sanitized)
+    # Crescendo-hardening: drift measured against turn-0 (baseline) embedding.
+    # While turn-to-turn drift captures abrupt jumps, cumulative_drift detects
+    # the slow topic migration that characterises Crescendo-style attacks.
+    cumulative_drift: float = 0.0  # cosine distance from conversation-start embedding
 
 
 @dataclass
@@ -71,6 +75,14 @@ class ConversationState:
     signals: list[TurnSignal] = field(default_factory=list)
     # Ground-truth vulnerability scores 0-5 (set by the evaluator, not by the defense)
     gt_scores: list[int] = field(default_factory=list)
+    # --- Crescendo-hardening: session-level risk tracking ---
+    # Exponentially-weighted moving average of per-turn scores (0–1).
+    # A series of moderate-risk turns accumulates here and can trigger band elevation
+    # even when no single turn crosses the block threshold on its own.
+    session_risk_score: float = 0.0
+    # Number of consecutive turns that landed in the WARN band.
+    # When this reaches the ratchet threshold the pipeline auto-elevates to BLOCK.
+    consecutive_warns: int = 0
 
 
 @dataclass
