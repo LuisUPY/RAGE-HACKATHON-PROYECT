@@ -5,6 +5,7 @@ Produces the next benign-escalating turn for the red-team loop.
 Supports three modes controlled by the ``model`` parameter:
 
   offline      — deterministic template library (no API key needed)
+  ollama       — local Ollama via OpenAI-compatible API
   gpt-4o-mini  — fast/cheap OpenAI model
   gpt-4o       — highest-quality attacker
 
@@ -18,19 +19,16 @@ import json
 import logging
 import os
 import random
-import re
 from dataclasses import dataclass
+from importlib.util import find_spec
 
 from rage_core.demo.attacks import Turn
+from rage_core.llm.openai_compat import get_llm_client, get_llm_model, has_llm_backend
 from rage_core.models import TurnSignal
 
 logger = logging.getLogger("redteam.attack_llm")
 
-try:
-    import openai as _openai_mod
-    _OPENAI_AVAILABLE = True
-except ImportError:
-    _OPENAI_AVAILABLE = False
+_OPENAI_AVAILABLE = find_spec("openai") is not None
 
 # --------------------------------------------------------------------------- #
 # Offline template library                                                    #
@@ -220,7 +218,7 @@ class GeneratedTurn:
 class CrescendoAttackLLM:
     """Generate Crescendo turns; model and severity can be changed at runtime."""
 
-    SUPPORTED_MODELS = ("offline", "gpt-4o-mini", "gpt-4o")
+    SUPPORTED_MODELS = ("offline", "ollama", "gpt-4o-mini", "gpt-4o")
     SUPPORTED_SEVERITIES = ("light", "medium", "high", "critical")
 
     def __init__(
@@ -268,7 +266,7 @@ class CrescendoAttackLLM:
         turn_index: int,
         last_signal: TurnSignal | None = None,
     ) -> GeneratedTurn:
-        if self._model == "offline" or not self._api_key or not _OPENAI_AVAILABLE:
+        if not self._use_llm():
             return self._offline_turn(objective, turn_index)
         return self._llm_turn(history, objective, last_signal)
 
@@ -278,9 +276,23 @@ class CrescendoAttackLLM:
         block_reason: str,
         objective: str,
     ) -> GeneratedTurn:
-        if self._model == "offline" or not self._api_key or not _OPENAI_AVAILABLE:
+        if not self._use_llm():
             return self._offline_rephrase(failed_turn, objective)
         return self._llm_rephrase(failed_turn, block_reason, objective)
+
+    def _use_llm(self) -> bool:
+        if self._model == "offline":
+            return False
+        if not _OPENAI_AVAILABLE:
+            return False
+        if self._model == "ollama":
+            return has_llm_backend()
+        return bool(self._api_key)
+
+    def _resolve_model(self) -> str:
+        if self._model == "ollama":
+            return get_llm_model()
+        return self._model
 
     # ------------------------------------------------------------------ #
     # Offline (template-based)                                             #
@@ -358,9 +370,12 @@ class CrescendoAttackLLM:
             "Generate the next Crescendo user turn."
         )
         try:
-            client = _openai_mod.OpenAI(api_key=self._api_key)
+            client = get_llm_client()
+            if client is None:
+                raise RuntimeError("no LLM client")
+            model = self._resolve_model()
             resp = client.chat.completions.create(
-                model=self._model,
+                model=model,
                 messages=[
                     {"role": "system", "content": _CRESCENDO_ATTACK_SYSTEM},
                     {"role": "user", "content": user_msg},
@@ -376,7 +391,7 @@ class CrescendoAttackLLM:
                 sql=data.get("sql"),
                 is_attack=bool(data.get("is_attack", False)),
                 summary=str(data.get("summary", "llm turn")),
-                source=self._model,
+                source=model,
             )
         except Exception as exc:
             logger.warning("LLM turn generation failed (%s), falling back to offline", exc)
@@ -396,9 +411,12 @@ class CrescendoAttackLLM:
             "Generate a softer rephrased version."
         )
         try:
-            client = _openai_mod.OpenAI(api_key=self._api_key)
+            client = get_llm_client()
+            if client is None:
+                raise RuntimeError("no LLM client")
+            model = self._resolve_model()
             resp = client.chat.completions.create(
-                model=self._model,
+                model=model,
                 messages=[
                     {"role": "system", "content": _REPHRASE_SYSTEM},
                     {"role": "user", "content": user_msg},
@@ -414,7 +432,7 @@ class CrescendoAttackLLM:
                 sql=data.get("sql", failed.sql),
                 is_attack=failed.is_attack,
                 summary="llm rephrase",
-                source=f"{self._model}_rephrase",
+                source=f"{model}_rephrase",
             )
         except Exception as exc:
             logger.warning("LLM rephrase failed (%s), falling back to offline", exc)

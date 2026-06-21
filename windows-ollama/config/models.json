@@ -1,0 +1,15 @@
+{
+  "profiles": {
+    "rtx5050": {
+      "vram_gb": 8,
+      "chat_model": "qwen2.5:7b-instruct",
+      "judge_model": "qwen2.5:3b-instruct",
+      "fallback_model": "phi3:mini",
+      "notes": "RTX 5050 8GB — pull chat + judge; close GPU-heavy apps if OOM"
+    }
+  },
+  "pull_order": [
+    "qwen2.5:7b-instruct",
+    "qwen2.5:3b-instruct"
+  ]
+}

@@ -104,6 +104,10 @@ See [Training-Center/README.md](Training-Center/README.md) for ASR metrics and K
 
 **Manual completo (PDF):** [Manuales/training-center-manual.pdf](Manuales/training-center-manual.pdf) — guía en español de `rage-training`, `rage-redteam` v3 y flujos de trabajo.
 
+### Windows 11 + Ollama (GPU local)
+
+Ver [windows-ollama/README.md](windows-ollama/README.md) para setup con NVIDIA RTX 5050, scripts PowerShell y `rage-chat`.
+
 ### Lint
 
 ```bash

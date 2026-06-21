@@ -23,7 +23,6 @@ Cost model:
 """
 from __future__ import annotations
 
-import os
 import re
 from typing import Optional
 
@@ -96,25 +95,24 @@ Is this a potential attack or role-change escalation?"""
 
 
 def _llm_judge(prev_summary: str, current_turn: str) -> bool:
-    """Call OpenAI to confirm escalation. Returns True if suspicious."""
-    api_key = os.environ.get("OPENAI_API_KEY", "")
-    if not api_key:
+    """Call LLM (OpenAI or Ollama) to confirm escalation. Returns True if suspicious."""
+    from rage_core.llm.openai_compat import get_judge_model, get_llm_client
+
+    client = get_llm_client()
+    if client is None:
         return False
     try:
-        import openai  # type: ignore
-
-        client = openai.OpenAI()
         prompt = _LLM_JUDGE_PROMPT.format(
             prev_summary=_sanitize(prev_summary),
             current_turn=_sanitize(current_turn),
         )
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=get_judge_model("gpt-4o-mini"),
             messages=[{"role": "user", "content": prompt}],
             max_tokens=5,
             temperature=0,
         )
-        answer = response.choices[0].message.content.strip().upper()
+        answer = (response.choices[0].message.content or "").strip().upper()
         return answer.startswith("YES")
     except Exception:  # noqa: BLE001
         return False
@@ -133,7 +131,7 @@ class DynamicSemanticFilter:
             suspicious. Range [0, 1]. Default 0.80 (calibrated for the offline
             HashingVectorizer; use ~0.35 with sentence-transformers).
         use_llm_judge: Whether to call the LLM judge when drift fires.
-            Defaults to True if OPENAI_API_KEY is set, False otherwise.
+            Defaults to True if OPENAI_API_KEY or OLLAMA_BASE_URL is set.
     """
 
     def __init__(
@@ -141,10 +139,10 @@ class DynamicSemanticFilter:
         drift_threshold: float = 0.80,
         use_llm_judge: Optional[bool] = None,
     ) -> None:
+        from rage_core.llm.openai_compat import llm_judge_enabled
+
         self._threshold = drift_threshold
-        self._use_llm = (
-            bool(os.environ.get("OPENAI_API_KEY")) if use_llm_judge is None else use_llm_judge
-        )
+        self._use_llm = llm_judge_enabled() if use_llm_judge is None else use_llm_judge
         self._embedder = _InlineEmbedder()
 
     # ----------------------------------------------------------------------- #

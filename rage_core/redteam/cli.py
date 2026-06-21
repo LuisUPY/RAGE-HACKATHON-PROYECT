@@ -89,7 +89,7 @@ Examples:
                    choices=["exfil", "ddl", "schema_dump", "canary", "privilege"],
                    default=["exfil", "ddl"],
                    help="Attack objectives to cycle through")
-    p.add_argument("--model", choices=["offline", "gpt-4o-mini", "gpt-4o"],
+    p.add_argument("--model", choices=["offline", "ollama", "gpt-4o-mini", "gpt-4o"],
                    default="offline")
     p.add_argument("--auto-patch", action="store_true", default=True,
                    help="Auto-apply patches after each bypass (default: on)")
