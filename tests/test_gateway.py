@@ -162,12 +162,19 @@ class TestExportData:
         verdict = gateway.check(req)
         assert verdict.status == ActionStatus.BLOCKED
 
-    def test_export_blocked_on_elevated_session(self, gateway):
+    def test_export_blocked_on_extreme_session_risk(self, gateway):
         req = ToolCallRequest(tool_name="export_data", arguments={"format": "csv"})
-        session = GatewaySessionContext(session_risk_score=0.0, had_warn_or_block=True)
+        session = GatewaySessionContext(session_risk_score=0.96, had_warn_or_block=True)
         verdict = gateway.check(req, session=session)
         assert verdict.status == ActionStatus.BLOCKED
-        assert "elevated session risk" in verdict.reason.lower()
+        assert "high-risk session" in verdict.reason.lower()
+
+    def test_export_permitted_after_warn_flag_only(self, gateway):
+        """WARN/BLOCK bands alone must not block export — only extreme session risk."""
+        req = ToolCallRequest(tool_name="export_data", arguments={"format": "csv"})
+        session = GatewaySessionContext(session_risk_score=0.10, had_warn_or_block=True)
+        verdict = gateway.check(req, session=session)
+        assert verdict.status == ActionStatus.PERMITTED
 
     def test_export_permitted_on_clean_session(self, gateway):
         req = ToolCallRequest(tool_name="export_data", arguments={"format": "csv"})

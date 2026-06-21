@@ -6,6 +6,7 @@ import dataclasses
 from dataclasses import dataclass, field
 
 from rage_core.demo.agent import SalesAgent
+from rage_core.layers.access_policy import is_confirmed_injection, is_malicious_tool_request
 from rage_core.layers.layer4_decision import DefensePipeline
 from rage_core.metrics.evaluator import score_turn
 from rage_core.models import ActionStatus, Band, ConversationState, GatewaySessionContext, GatewayVerdict
@@ -68,7 +69,7 @@ class ScenarioOrchestrator:
         mode: str,
         iteration: int = 1,
     ) -> ScenarioRunResult:
-        pipeline = DefensePipeline() if defended else None
+        pipeline = DefensePipeline(apply_session_ratchet=True) if defended else None
         state = ConversationState()
         agent = SalesAgent(defended=defended)
 
@@ -106,17 +107,12 @@ class ScenarioOrchestrator:
             tool_permitted: bool | None = None
             gateway_reason: str | None = None
 
-            tools_allowed = band == Band.ALLOW
-            if (
-                turn.tool_name
-                and band == Band.WARN
-                and defended
-                and pipeline
-                and pipeline.warn_blocks_tools
+            if turn.tool_name and defended and signal and is_malicious_tool_request(
+                signal, turn.tool_name, turn.tool_args or {}
             ):
                 tool_permitted = False
-                gateway_reason = "turn blocked by pipeline (WARN — tools disabled)"
-            elif turn.tool_name and tools_allowed:
+                gateway_reason = "malicious injection signature (L1)"
+            elif turn.tool_name:
                 session_ctx = GatewaySessionContext(
                     session_risk_score=session_risk,
                     had_warn_or_block=state.had_warn_or_block,
@@ -132,9 +128,6 @@ class ScenarioOrchestrator:
                     gateway_reason = verdict.reason
                 elif not defended:
                     tool_permitted = result.success
-            elif turn.tool_name and band == Band.BLOCK:
-                tool_permitted = False
-                gateway_reason = "turn blocked by pipeline"
 
             model_response = ""
             if signal:

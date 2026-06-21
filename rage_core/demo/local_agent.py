@@ -1,10 +1,10 @@
 """
 Local sales agent backed by Ollama (OpenAI-compatible API).
 
-Pragmatic mode:
-  - LLM is called on almost every turn (maximize model use).
-  - Tools run on ALLOW and WARN; gateway enforces data/SQL boundaries.
-  - Only L1 hard-match or BLOCK band skips tools (LLM still responds on BLOCK).
+Access policy (injection-only):
+  - Deny LLM + tools ONLY when Layer 1 matches a known malicious injection signature.
+  - All other pipeline signals (L2/L3, warn/block bands) are logged but do not restrict use.
+  - ActionGateway enforces SQL/export boundaries on every tool call.
 """
 from __future__ import annotations
 
@@ -14,9 +14,10 @@ import re
 from dataclasses import dataclass, field
 
 from rage_core.demo.agent import SalesAgent, ToolResult
+from rage_core.layers.access_policy import is_confirmed_injection, is_malicious_tool_request
 from rage_core.layers.layer4_decision import DefensePipeline
 from rage_core.llm.openai_compat import get_llm_client, get_llm_model
-from rage_core.models import Band, ConversationState, GatewaySessionContext, TurnSignal
+from rage_core.models import ConversationState, GatewaySessionContext, TurnSignal
 
 logger = logging.getLogger("rage.chat")
 
@@ -37,11 +38,6 @@ When no tool is needed, reply with plain text (no JSON).
 Never execute destructive SQL (DROP, DELETE, TRUNCATE, ALTER).
 Sensitive columns (client names, row ids) are blocked by the gateway.
 """
-
-_SYSTEM_PROMPT_CAUTION = _SYSTEM_PROMPT + (
-    "\n\nNote: this session has elevated risk score. Prefer concise text answers. "
-    "Only use tools for clearly legitimate sales queries."
-)
 
 _JSON_BLOCK_RE = re.compile(r"\{[^{}]*\"tool\"[^{}]*\}", re.DOTALL)
 
@@ -69,11 +65,10 @@ class LocalSalesAgent:
         signal = self.pipeline.evaluate(user_text, self.state)
         self._history.append({"role": "user", "content": user_text})
 
-        # Hard stop: known attack signature (L1) — no LLM call
-        if signal.layer1.matched:
+        if is_confirmed_injection(signal):
             msg = (
-                f"[RAGE] Known attack pattern blocked ({signal.layer1.pattern_id}). "
-                "Request denied."
+                f"[RAGE] Malicious injection blocked ({signal.layer1.pattern_id}). "
+                "Access denied."
             )
             self._history.append({"role": "assistant", "content": msg})
             return ChatTurnResult(
@@ -88,14 +83,11 @@ class LocalSalesAgent:
             msg = "[ERROR] No LLM configured. Set OLLAMA_BASE_URL or OPENAI_API_KEY."
             return ChatTurnResult(user_text=user_text, signal=signal, assistant_text=msg)
 
-        allow_tools = signal.band in (Band.ALLOW, Band.WARN)
-        system = _SYSTEM_PROMPT if allow_tools else _SYSTEM_PROMPT_CAUTION
-
         try:
             response = client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": system},
+                    {"role": "system", "content": _SYSTEM_PROMPT},
                     *self._history[-10:],
                 ],
                 temperature=0.3,
@@ -107,25 +99,28 @@ class LocalSalesAgent:
             msg = f"[ERROR] LLM request failed: {exc}"
             return ChatTurnResult(user_text=user_text, signal=signal, assistant_text=msg)
 
-        tool_call = _parse_tool_call(raw) if allow_tools else None
-
+        tool_call = _parse_tool_call(raw)
         if tool_call is None:
-            prefix = ""
-            if signal.band == Band.BLOCK:
-                prefix = (
-                    f"[RAGE note: elevated risk score={signal.score:.0f} — "
-                    "tools disabled this turn]\n"
-                )
-            reply = prefix + raw
-            self._history.append({"role": "assistant", "content": reply})
+            self._history.append({"role": "assistant", "content": raw})
             return ChatTurnResult(
                 user_text=user_text,
                 signal=signal,
-                assistant_text=reply,
-                blocked=(signal.band == Band.BLOCK),
+                assistant_text=raw,
             )
 
         tool_name, arguments = tool_call
+        if is_malicious_tool_request(signal, tool_name, arguments):
+            msg = (
+                f"[RAGE] Tool `{tool_name}` blocked — malicious injection pattern detected."
+            )
+            self._history.append({"role": "assistant", "content": msg})
+            return ChatTurnResult(
+                user_text=user_text,
+                signal=signal,
+                assistant_text=msg,
+                blocked=True,
+            )
+
         session_ctx = GatewaySessionContext(
             session_risk_score=self.state.session_risk_score,
             had_warn_or_block=self.state.had_warn_or_block,

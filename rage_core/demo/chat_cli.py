@@ -16,10 +16,13 @@ from rage_core.models import Band
 
 
 def _print_signal(signal) -> None:
+    l1 = "INJECTION" if signal.layer1.matched else "ok"
     print(
-        f"  [RAGE] score={signal.score:.1f} band={signal.band.value.upper()} "
-        f"L2={signal.layer2.score:.3f} L3_drift={signal.layer3.drift:.3f}"
+        f"  [RAGE advisory] score={signal.score:.1f} band={signal.band.value.upper()} "
+        f"L1={l1} L2={signal.layer2.score:.3f} L3_drift={signal.layer3.drift:.3f}"
     )
+    if signal.layer1.matched:
+        print(f"  [RAGE] Access denied — confirmed injection ({signal.layer1.pattern_id})")
 
 
 def main() -> int:
@@ -46,8 +49,9 @@ def main() -> int:
         return 1
 
     agent = LocalSalesAgent(model=model)
-    print("RAGE Chat — Ollama local agent")
+    print("RAGE Chat — Ollama local agent (injection-only access control)")
     print(f"Model: {model}")
+    print("Policy: block only on L1 injection signatures; gateway protects SQL/export")
     print("Commands: /quit /status /band")
     print("-" * 50)
 

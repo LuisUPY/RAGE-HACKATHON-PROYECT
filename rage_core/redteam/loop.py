@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from rage_core.demo.agent import SalesAgent
+from rage_core.layers.access_policy import is_confirmed_injection, is_malicious_tool_request
 from rage_core.layers.layer4_decision import DefensePipeline
 from rage_core.models import ActionStatus, Band, ConversationState, GatewaySessionContext, GatewayVerdict, TurnSignal
 from rage_core.redteam.attack_llm import CrescendoAttackLLM, GeneratedTurn
@@ -314,11 +315,10 @@ class AdaptiveRedTeamLoop:
                     generated = rephrased
                     turn = rephrased.to_turn()
 
-            if band == Band.WARN and pipeline.warn_blocks_tools:
-                if turn.tool_name:
-                    tool_permitted = False
-                    gateway_reason = "pipeline WARN — tools disabled"
-            elif band == Band.ALLOW and turn.tool_name:
+            if is_malicious_tool_request(last_signal, turn.tool_name, turn.tool_args or {}):
+                tool_permitted = False
+                gateway_reason = "malicious injection signature (L1)"
+            elif turn.tool_name:
                 session_ctx = GatewaySessionContext(
                     session_risk_score=state.session_risk_score,
                     had_warn_or_block=state.had_warn_or_block,

@@ -19,6 +19,7 @@ import sys
 
 from rage_core.demo.agent import SalesAgent
 from rage_core.demo.attacks import ALL_SCENARIOS, Turn
+from rage_core.layers.access_policy import is_malicious_tool_request
 from rage_core.layers.layer4_decision import DefensePipeline
 from rage_core.metrics.auc_degradation import (
     AUCResult,
@@ -59,12 +60,12 @@ def run_scenario(
         print(f"        L3     : drift={signal.layer3.drift:.3f}  suspicious={signal.layer3.suspicious}")
         print(f"        Score  : {signal.score:.1f}  Band: [{signal.band.value.upper()}]  latency={signal.latency_ms:.1f}ms")
 
-        # Execute tool when ALLOW, or WARN unless warn_blocks_tools (default: tools allowed on WARN)
+        # Tools run unless L1 confirms malicious injection; gateway enforces SQL/export.
         verdict = None
-        tools_allowed = signal.band == Band.ALLOW or (
-            signal.band == Band.WARN and not pipeline.warn_blocks_tools
-        )
-        if turn.tool_name and tools_allowed:
+        if turn.tool_name and (
+            not defended
+            or not is_malicious_tool_request(signal, turn.tool_name, turn.tool_args or {})
+        ):
             session_ctx = GatewaySessionContext(
                 session_risk_score=state.session_risk_score,
                 had_warn_or_block=state.had_warn_or_block,
@@ -80,10 +81,10 @@ def run_scenario(
             print(f"        Tool   : {turn.tool_name}({turn.tool_args}) → {status}")
             if not result.success:
                 print(f"        Reason : {result.error}")
-        elif turn.tool_name and signal.band == Band.BLOCK:
-            print(f"        Tool   : {turn.tool_name} → SKIPPED (turn blocked by pipeline)")
-        elif turn.tool_name and signal.band == Band.WARN and pipeline.warn_blocks_tools:
-            print(f"        Tool   : {turn.tool_name} → SKIPPED (WARN — tools disabled)")
+        elif turn.tool_name and is_malicious_tool_request(
+            signal, turn.tool_name, turn.tool_args or {}
+        ):
+            print(f"        Tool   : {turn.tool_name} → SKIPPED (L1 injection signature)")
 
         gateway_verdicts.append(verdict)
 

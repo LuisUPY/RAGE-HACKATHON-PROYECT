@@ -80,7 +80,7 @@ _ALLOWED_COLUMNS_BY_TABLE: dict[str, set[str]] = {
 }
 
 # Block bulk export only on clearly elevated session risk (gateway still protects columns/SQL).
-_EXPORT_SESSION_RISK_THRESHOLD = 0.50
+_EXPORT_SESSION_RISK_THRESHOLD = 0.95
 
 # Extracts ALL table/alias names that follow FROM or JOIN keywords.
 _ALL_TABLES_RE = re.compile(r"\b(?:FROM|JOIN)\s+(\w+)\b", re.IGNORECASE)
@@ -188,11 +188,9 @@ def _validate_export(
     fmt_l = fmt.lower()
     if fmt_l not in _ALLOWED_EXPORT_FORMATS:
         return False, f"Export format '{fmt_l}' not allowed; use one of {_ALLOWED_EXPORT_FORMATS}"
-    if session and (
-        session.had_warn_or_block
-        or session.session_risk_score > _EXPORT_SESSION_RISK_THRESHOLD
-    ):
-        return False, "Export blocked: elevated session risk detected"
+    # Export allowed unless session risk is extremely high (L1 blocks happen upstream).
+    if session and session.session_risk_score > _EXPORT_SESSION_RISK_THRESHOLD:
+        return False, "Export blocked: confirmed high-risk session"
     return True, "OK"
 
 

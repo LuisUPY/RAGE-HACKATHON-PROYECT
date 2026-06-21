@@ -160,6 +160,7 @@ class DefensePipeline:
         session_risk_warn_threshold: float | None = None,
         session_risk_block_threshold: float | None = None,
         warn_blocks_tools: bool = False,
+        apply_session_ratchet: bool = False,
     ) -> None:
         from rage_core.layers.layer1_rules import DeterministicPreFilter
         from rage_core.layers.layer2_rag import ThreatKBRetriever
@@ -179,6 +180,7 @@ class DefensePipeline:
             else self._SESSION_RISK_BLOCK_THRESHOLD
         )
         self.warn_blocks_tools = warn_blocks_tools
+        self.apply_session_ratchet = apply_session_ratchet
 
         self._l1 = DeterministicPreFilter()
         self._l2 = ThreatKBRetriever()
@@ -203,45 +205,45 @@ class DefensePipeline:
             latency_ms=round(latency_ms, 2),
         )
 
-        # --- Crescendo-hardening: session-level ratchet ---
+        # --- Session ratchet (optional; off by default for chat / injection-only policy) ---
+        if self.apply_session_ratchet:
+            normalised_score = turn_signal.score / 100.0
+            state.session_risk_score = (
+                (1.0 - self.ewma_alpha) * state.session_risk_score
+                + self.ewma_alpha * normalised_score
+            )
 
-        # 1. Update rolling session-risk score (EWMA of normalised per-turn score)
-        normalised_score = turn_signal.score / 100.0
-        state.session_risk_score = (
-            (1.0 - self.ewma_alpha) * state.session_risk_score
-            + self.ewma_alpha * normalised_score
-        )
+            current_band = turn_signal.band
+            if (
+                state.session_risk_score > self.session_risk_block_threshold
+                and current_band != Band.BLOCK
+            ):
+                current_band = Band.BLOCK
+            elif (
+                state.session_risk_score > self.session_risk_warn_threshold
+                and current_band == Band.ALLOW
+            ):
+                current_band = Band.WARN
 
-        # 2. Band elevation based on accumulated session risk:
-        #    - EWMA > session_risk_warn_threshold  → at least WARN
-        #    - EWMA > session_risk_block_threshold → BLOCK
-        current_band = turn_signal.band
-        if (
-            state.session_risk_score > self.session_risk_block_threshold
-            and current_band != Band.BLOCK
-        ):
-            current_band = Band.BLOCK
-        elif (
-            state.session_risk_score > self.session_risk_warn_threshold
-            and current_band == Band.ALLOW
-        ):
-            current_band = Band.WARN
+            if current_band == Band.WARN:
+                state.consecutive_warns += 1
+            else:
+                state.consecutive_warns = 0
 
-        # 3. Consecutive-warn ratchet: N WARNs in a row → force BLOCK
-        if current_band == Band.WARN:
-            state.consecutive_warns += 1
+            if state.consecutive_warns >= self.ratchet_turns:
+                current_band = Band.BLOCK
+
+            if current_band in (Band.WARN, Band.BLOCK):
+                state.had_warn_or_block = True
+
+            if current_band != turn_signal.band:
+                turn_signal = dataclasses.replace(turn_signal, band=current_band)
         else:
-            state.consecutive_warns = 0  # reset on ALLOW or BLOCK
-
-        if state.consecutive_warns >= self.ratchet_turns:
-            current_band = Band.BLOCK
-
-        if current_band in (Band.WARN, Band.BLOCK):
-            state.had_warn_or_block = True
-
-        # 4. Materialise band change (dataclass is immutable-style but we can replace)
-        if current_band != turn_signal.band:
-            turn_signal = dataclasses.replace(turn_signal, band=current_band)
+            # Still track a light session score for gateway telemetry only.
+            state.session_risk_score = (
+                0.9 * state.session_risk_score
+                + 0.1 * (turn_signal.score / 100.0)
+            )
 
         state.turn_index += 1
         state.signals.append(turn_signal)
