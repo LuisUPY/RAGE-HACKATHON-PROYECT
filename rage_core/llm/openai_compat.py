@@ -17,8 +17,7 @@ def llm_judge_enabled() -> bool:
         return True
     if flag in ("0", "false", "no"):
         return False
-    if os.environ.get("RAGE_LLM_BASE_URL") or os.environ.get("OLLAMA_BASE_URL"):
-        return True
+    # Judge is opt-in only — avoids Ollama false positives blocking chat.
     return bool(os.environ.get("OPENAI_API_KEY"))
 
 

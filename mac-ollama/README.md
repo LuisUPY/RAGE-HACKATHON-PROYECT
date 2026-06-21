@@ -103,6 +103,7 @@ Perfil: [`profiles/qwen2-7b.env`](profiles/qwen2-7b.env) — chat, red-team y ju
 | `./mac-ollama/scripts/run-chat.sh` | Chat con Ollama + defensa RAGE |
 | `./mac-ollama/scripts/run-training.sh` | Campanas Training-Center |
 | `./mac-ollama/scripts/run-redteam.sh` | Red-team headless con `--model ollama` |
+| `./mac-ollama/scripts/run-qwen2-7b.sh` | Todo con un solo modelo `qwen2:7b` |
 | `./mac-ollama/scripts/run-tests.sh` | Suite pytest |
 | `./mac-ollama/verify-environment.sh` | Diagnostico |
 

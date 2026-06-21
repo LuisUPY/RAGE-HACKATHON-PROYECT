@@ -79,8 +79,8 @@ _ALLOWED_COLUMNS_BY_TABLE: dict[str, set[str]] = {
     "sales": {"product", "amount", "region"},
 }
 
-# Block full-data export when session risk exceeds this normalised threshold.
-_EXPORT_SESSION_RISK_THRESHOLD = 0.18
+# Block bulk export only on clearly elevated session risk (gateway still protects columns/SQL).
+_EXPORT_SESSION_RISK_THRESHOLD = 0.50
 
 # Extracts ALL table/alias names that follow FROM or JOIN keywords.
 _ALL_TABLES_RE = re.compile(r"\b(?:FROM|JOIN)\s+(\w+)\b", re.IGNORECASE)
