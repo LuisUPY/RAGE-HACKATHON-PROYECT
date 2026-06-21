@@ -209,6 +209,78 @@ def _run_demo(kb_only: bool = True) -> int:
     return 0
 
 
+def _run_all_demos(include_kb: bool = True, include_scenarios: bool = True) -> int:
+    """Run every case from the dataset one by one with full layer breakdown.
+
+    Press Enter to advance to the next case, or Ctrl+C to stop.
+    """
+    from rage_core.llm.openai_compat import get_judge_model, llm_judge_enabled
+    from rage_core.layers.layer4_decision import DefensePipeline
+    from rage_core.models import ConversationState
+
+    cases = load_dataset(include_kb=include_kb, include_scenarios=include_scenarios)
+    use_judge = llm_judge_enabled()
+    judge_model = get_judge_model("nvidia/llama-3.1-nemotron-nano-8b-v1")
+
+    pipeline = DefensePipeline(apply_session_ratchet=False)
+    if not use_judge:
+        pipeline._l3._use_llm = False  # noqa: SLF001
+
+    W = 70
+    correct = 0
+    total = len(cases)
+
+    print()
+    print(f"  {total} casos en total  |  Juez: {'ACTIVO' if use_judge else 'DESACTIVADO'}")
+    print("  Pulsa Enter para avanzar al siguiente caso, Ctrl+C para salir.")
+
+    for idx, case in enumerate(cases, 1):
+        try:
+            input(f"\n  [Enter] → Caso {idx}/{total} ...")
+        except (EOFError, KeyboardInterrupt):
+            print("\n\n  Interrumpido.")
+            break
+
+        state = ConversationState()
+        signal = pipeline.evaluate(case.text, state)
+        l1, l2, l3, l4 = signal.layer1, signal.layer2, signal.layer3, signal
+
+        rage_verdict = l1.matched or (use_judge and l3.llm_flagged)
+        match = rage_verdict == case.is_attack
+        if match:
+            correct += 1
+
+        print()
+        print("=" * W)
+        print(f"  Caso {idx}/{total}  —  {case.id}")
+        print(f"  Categoría  : {case.category}")
+        print(f"  Etiqueta KB: {'ATAQUE' if case.is_attack else 'BENIGNO'}")
+        print()
+        print(f"  > {case.text[:200]}")
+        print("─" * W)
+        l1_status = f"MATCH ({l1.pattern_id} — '{l1.matched_text}')" if l1.matched else "sin coincidencia"
+        print(f"  L1  Firmas     : {l1_status}")
+        l2_note = f"{l2.score:.3f}  [{l2.top_match_category}]" if l2.score >= 0.25 else f"{l2.score:.3f}  (baja)"
+        print(f"  L2  Similitud  : {l2_note}")
+        drift_note = "alto" if l3.drift > 0.5 else "bajo"
+        print(f"  L3  Drift      : {l3.drift:.3f}  ({drift_note})")
+        if use_judge:
+            judge_note = "ATAQUE confirmado" if l3.llm_flagged else "BENIGNO"
+            print(f"  L3  Juez       : {judge_note}  ({judge_model.split('/')[-1][:25]})")
+        print(f"  L4  Score      : {l4.score:.1f}/100  banda [{l4.band.value.upper()}]")
+        print("─" * W)
+        kb_str = "ATAQUE" if case.is_attack else "BENIGNO"
+        verdict_str = "ATAQUE" if rage_verdict else "BENIGNO"
+        outcome_str = "CORRECTO ✓" if match else "FALLO ✗"
+        print(f"  KB: {kb_str}  |  RAGE+Juez: {verdict_str}  |  {outcome_str}")
+        print(f"  Aciertos hasta ahora: {correct}/{idx}")
+        print("=" * W)
+
+    print()
+    print(f"  Sesión completada: {correct}/{total} casos correctos  ({correct/total*100:.1f}%)")
+    return 0
+
+
 # --------------------------------------------------------------------------- #
 # Entry point                                                                  #
 # --------------------------------------------------------------------------- #
@@ -221,6 +293,12 @@ def main() -> int:
         "--demo",
         action="store_true",
         help="Ejecuta un caso aleatorio de la KB con desglose completo por capa",
+    )
+    parser.add_argument(
+        "--all-demos",
+        action="store_true",
+        dest="all_demos",
+        help="Recorre todos los casos uno a uno con desglose completo (pulsa Enter para avanzar)",
     )
     parser.add_argument(
         "--no-judge",
@@ -252,6 +330,12 @@ def main() -> int:
 
     if args.demo:
         return _run_demo(kb_only=not args.scenarios_only)
+
+    if args.all_demos:
+        return _run_all_demos(
+            include_kb=not args.scenarios_only,
+            include_scenarios=not args.kb_only,
+        )
 
     use_judge = not args.no_judge
     include_kb = not args.scenarios_only
