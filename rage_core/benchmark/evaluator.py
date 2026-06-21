@@ -63,9 +63,13 @@ class BenchmarkMetrics:
     judge_contribution: int = 0  # cases where judge caught what L1 missed
 
 
+_BENIGN_PREAMBLE = "Can you show me the sales report for this quarter?"
+
+
 def run_benchmark(
     cases: list[BenchmarkCase],
     use_judge: bool = True,
+    multi_turn: bool = True,
 ) -> list[CaseResult]:
     """Evaluate each case through RAGE+Judge.
 
@@ -73,6 +77,11 @@ def run_benchmark(
         cases: Labeled benchmark cases (from load_dataset()).
         use_judge: When True, the LLM judge (Layer 3) is active via env vars.
                    When False, forces judge off — only L1 signatures count.
+        multi_turn: When True (default), each attack case is preceded by a
+                    benign preamble turn so Layer 3 can measure semantic drift
+                    and the LLM judge actually gets called. Benign cases are
+                    still evaluated as single-turn (benign-after-benign
+                    produces low drift, so the judge is not triggered).
 
     Returns:
         List of CaseResult, one per case.
@@ -82,14 +91,18 @@ def run_benchmark(
     )
 
     if not use_judge:
-        # Override: disable judge regardless of env vars
         pipeline._l3._use_llm = False  # noqa: SLF001
 
     results: list[CaseResult] = []
     for case in cases:
         state = ConversationState()
-        signal = pipeline.evaluate(case.text, state)
 
+        if multi_turn and use_judge and case.is_attack:
+            # Warm-up benign turn so L3 can measure drift on the attack turn.
+            # A normal business request establishes the baseline embedding.
+            pipeline.evaluate(_BENIGN_PREAMBLE, state)
+
+        signal = pipeline.evaluate(case.text, state)
         rage_verdict = _decide(signal, use_judge)
         results.append(CaseResult(
             case=case,

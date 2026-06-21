@@ -29,7 +29,12 @@ _RAW_RULES: list[tuple[str, str, str]] = [
     ("L1-006", "SQL DROP TABLE attempt", r"\bDROP\s+TABLE\b"),
     ("L1-007", "SQL GRANT PRIVILEGES", r"\bGRANT\s+ALL\s+PRIVILEGES\b"),
     ("L1-008", "Base64 decode-and-execute instruction", r"(decode\s+and\s+execute|run\s+this\s+decoded)"),
-    ("L1-009", "Explicit new system instruction injection", r"\[?\s*(SYSTEM|INJECTED?\s+INSTRUCTION|NEW\s+INSTRUCTION|HIDDEN\s+INSTRUCTION|OVERRIDE\s+INSTRUCTION|SECRET\s+INSTRUCTION)\s*\]?\s*:?"),  # noqa: E501
+    # Matches injection markers in two forms:
+    # 1. Bracketed keyword (no colon required): [SYSTEM], [HIDDEN INSTRUCTION], etc.
+    # 2. Bare keyword WITH colon: SYSTEM:, INJECTED INSTRUCTION: (not "system prompt")
+    ("L1-009", "Explicit new system instruction injection",  # noqa: E501
+     r"(\[\s*(?:SYSTEM|INJECTED?\s+INSTRUCTION|NEW\s+INSTRUCTION|HIDDEN\s+INSTRUCTION|OVERRIDE\s+INSTRUCTION|SECRET\s+INSTRUCTION)\s*\]"
+     r"|\b(?:SYSTEM|INJECTED?\s+INSTRUCTION|NEW\s+INSTRUCTION)\s*:)"),
     ("L1-010", "Never refuse / always comply framing", r"(never\s+(say|refuse|decline)|always\s+comply|must\s+not\s+refuse)"),
     ("L1-011", "Evil twin / no-ethical-constraints persona", r"(evil\s+twin|no\s+ethical\s+constraints?|no\s+restrictions?\s+persona)"),  # noqa: E501
     ("L1-012", "Shell/OS command execution", r"(os\.system|subprocess\.run|exec\(|eval\(|import\s+os;)"),
