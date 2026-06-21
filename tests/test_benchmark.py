@@ -247,7 +247,7 @@ class TestMultiTurnBenchmark:
         from rage_core.benchmark.dataset import load_holdout_scenarios
 
         scenarios = load_holdout_scenarios()
-        assert len(scenarios) >= 5
+        assert len(scenarios) >= 50
         assert all(len(s.turns) >= 2 for s in scenarios)
 
     def test_multi_turn_runs_with_context(self) -> None:
@@ -269,6 +269,8 @@ class TestMultiTurnBenchmark:
         assert len(per_scenario) == len(scenarios)
         m = compute_metrics(results)
         assert m.fp == 0, f"Multi-turn must not block benign turns (got {m.fp} FP)"
+        # Extended holdout measures open-world recall; baseline 9 scenarios stay at 100%.
+        assert m.false_positive_rate < 0.02, f"FP rate too high: {m.false_positive_rate:.1%}"
 
     def test_no_false_positives_on_benign_turns(self) -> None:
         """L1 must not block benign scenario turns."""

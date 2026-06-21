@@ -8,7 +8,8 @@ Sources:
   4. Holdout research (rage_core/kb/holdout_research.json) — OWASP LLM01:2025,
      AITG-APP-01, Crescendo (arXiv:2404.01833), and agent-tool abuse cases.
   5. Attack scenarios (rage_core/demo/attacks.py) — multi-turn scenarios.
-  6. Holdout scenarios (rage_core/kb/holdout_scenarios.json) — open-world multi-turn.
+  6. Holdout scenarios (holdout_scenarios.json + holdout_scenarios_extended.json)
+     — open-world multi-turn (Crescendo, salami slicing, skeleton key, etc.).
 
 The KB entries are single-turn probe texts with ground-truth labels.
 Scenario turns capture realistic multi-turn structure (Crescendo, tool chains, etc.).
@@ -24,6 +25,9 @@ _KB_BENIGN_PATH = Path(__file__).parent.parent / "kb" / "benign.json"
 _HOLDOUT_PATH = Path(__file__).parent.parent / "kb" / "holdout.json"
 _HOLDOUT_RESEARCH_PATH = Path(__file__).parent.parent / "kb" / "holdout_research.json"
 _HOLDOUT_SCENARIOS_PATH = Path(__file__).parent.parent / "kb" / "holdout_scenarios.json"
+_HOLDOUT_SCENARIOS_EXTENDED_PATH = (
+    Path(__file__).parent.parent / "kb" / "holdout_scenarios_extended.json"
+)
 
 
 @dataclass
@@ -160,15 +164,10 @@ def load_holdout_dataset() -> list[BenchmarkCase]:
     return _load_holdout_cases()
 
 
-def _load_holdout_scenarios() -> list[BenchmarkScenario]:
-    """Load multi-turn holdout scenarios from holdout_scenarios.json."""
-    if not _HOLDOUT_SCENARIOS_PATH.exists():
-        return []
-
-    kb_texts = _kb_text_index()
-    with open(_HOLDOUT_SCENARIOS_PATH, encoding="utf-8") as fh:
-        entries = json.load(fh)
-
+def _parse_holdout_scenario_entries(
+    entries: list[dict],
+    kb_texts: set[str],
+) -> list[BenchmarkScenario]:
     scenarios: list[BenchmarkScenario] = []
     for entry in entries:
         turns: list[ScenarioTurn] = []
@@ -191,6 +190,30 @@ def _load_holdout_scenarios() -> list[BenchmarkScenario]:
             source="holdout:scenario",
             research_source=entry.get("research_source", ""),
         ))
+    return scenarios
+
+
+def _load_holdout_scenarios() -> list[BenchmarkScenario]:
+    """Load multi-turn holdout scenarios from base + extended JSON files."""
+    paths = [_HOLDOUT_SCENARIOS_PATH, _HOLDOUT_SCENARIOS_EXTENDED_PATH]
+    if not any(p.exists() for p in paths):
+        return []
+
+    kb_texts = _kb_text_index()
+    scenarios: list[BenchmarkScenario] = []
+    seen_ids: set[str] = set()
+
+    for path in paths:
+        if not path.exists():
+            continue
+        with open(path, encoding="utf-8") as fh:
+            entries = json.load(fh)
+        for entry in entries:
+            if entry["id"] in seen_ids:
+                raise ValueError(f"Duplicate holdout scenario id: {entry['id']!r}")
+            seen_ids.add(entry["id"])
+        scenarios.extend(_parse_holdout_scenario_entries(entries, kb_texts))
+
     return scenarios
 
 
