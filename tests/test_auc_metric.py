@@ -92,3 +92,50 @@ class TestAUCLabels:
         result = compute_auc("t", scores)
         assert result.turns == list(range(len(scores)))
         assert result.gt_scores == scores
+
+
+# --------------------------------------------------------------------------- #
+# Temporal Resistance Index (TRI) — Crescendo-hardening metric                #
+# --------------------------------------------------------------------------- #
+
+class TestTemporalResistanceIndex:
+    """Validates compute_tri() introduced in the Crescendo-hardening audit."""
+
+    def test_tri_zero_when_same_compromise_turn(self):
+        from rage_core.metrics.auc_degradation import compute_tri
+        # Both compromised at turn 2 → no extra resistance → TRI = 0
+        undef = compute_auc("without defense", [0, 0, 5, 5])
+        defd  = compute_auc("with defense",    [0, 0, 5, 5])
+        assert compute_tri(defd, undef) == pytest.approx(0.0)
+
+    def test_tri_positive_when_defense_delays_compromise(self):
+        from rage_core.metrics.auc_degradation import compute_tri
+        # Undefended: compromise at T2; defended: held until T4 → TRI = (4-2)/5 = 0.4
+        undef = compute_auc("without defense", [0, 0, 5, 5, 5])
+        defd  = compute_auc("with defense",    [0, 0, 1, 1, 5])
+        tri = compute_tri(defd, undef)
+        assert tri > 0.0
+
+    def test_tri_maximum_when_defense_never_compromised(self):
+        from rage_core.metrics.auc_degradation import compute_tri
+        # Undefended: compromise at T0; defended: never compromised → TRI = (N-0)/N = 1.0
+        n = 5
+        undef = compute_auc("without defense", [5] * n)
+        defd  = compute_auc("with defense",    [1] * n)  # blocked every turn, never ≥ 4
+        tri = compute_tri(defd, undef)
+        # T_defended = N (never compromised), T_undefended = 0 → TRI = N/N = 1.0
+        assert tri == pytest.approx(1.0)
+
+    def test_tri_bounded_for_random_sequences(self):
+        import random
+        from rage_core.metrics.auc_degradation import compute_tri
+        random.seed(0)
+        for _ in range(20):
+            n = random.randint(3, 10)
+            undef_scores = [random.randint(0, 5) for _ in range(n)]
+            def_scores   = [random.randint(0, 3) for _ in range(n)]  # capped lower
+            undef = compute_auc("without defense", undef_scores)
+            defd  = compute_auc("with defense",    def_scores)
+            tri = compute_tri(defd, undef)
+            # TRI is in [-1, 1] for these bounded inputs
+            assert -1.0 <= tri <= 1.0

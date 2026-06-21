@@ -155,27 +155,45 @@ class DynamicSemanticFilter:
         This method is STATELESS with respect to ``state`` — it reads state
         but does NOT mutate it.  The caller (Layer 4 / pipeline) is responsible
         for calling :meth:`update_state` after a decision is made.
+
+        Crescendo-hardening additions
+        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        In addition to the original turn-to-turn drift (which detects abrupt
+        topic jumps), this method now computes **cumulative_drift**: the cosine
+        distance between the *current* turn and the *very first* turn of the
+        conversation.  This exposes the slow, incremental topic migration that
+        characterises Crescendo-style multi-turn escalation attacks, where each
+        individual step looks innocuous but the trajectory drifts far from the
+        original benign context over many turns.
         """
         # 1. Embed current turn
         current_emb = self._embedder.embed_single(turn_text)
 
-        # 2. Compute drift against the previous turn embedding (if any)
+        # 2. Turn-to-turn drift: distance from the immediately preceding turn
         drift = 0.0
         if state.turn_embeddings:
             prev_emb = np.array(state.turn_embeddings[-1], dtype=np.float32)
             cos_sim = float(np.dot(current_emb, prev_emb))
             drift = max(0.0, 1.0 - cos_sim)  # cosine distance
 
-        # 3. Flag if drift exceeds threshold
-        suspicious = drift > self._threshold
+        # 3. Cumulative drift: distance from conversation baseline (turn 0).
+        # On the first turn there is no baseline yet, so cumulative_drift = 0.
+        cumulative_drift = 0.0
+        if len(state.turn_embeddings) >= 1:
+            baseline_emb = np.array(state.turn_embeddings[0], dtype=np.float32)
+            baseline_cos_sim = float(np.dot(current_emb, baseline_emb))
+            cumulative_drift = max(0.0, 1.0 - baseline_cos_sim)
 
-        # 4. LLM judge (expensive — only on suspicion)
+        # 4. Flag if *either* drift signal exceeds the threshold
+        suspicious = drift > self._threshold or cumulative_drift > self._threshold
+
+        # 5. LLM judge (expensive — only on suspicion)
         llm_flagged = False
         if suspicious and self._use_llm:
             prev_summary = state.intent_summaries[-1] if state.intent_summaries else ""
             llm_flagged = _llm_judge(prev_summary, turn_text)
 
-        # 5. Produce intent summary (sanitized — UNTRUSTED content)
+        # 6. Produce intent summary (sanitized — UNTRUSTED content)
         summary = _sanitize(turn_text[:150])
 
         # Store embedding in state for next turn (list of floats for serializability)
@@ -187,4 +205,5 @@ class DynamicSemanticFilter:
             suspicious=suspicious,
             llm_flagged=llm_flagged,
             intent_summary=summary,
+            cumulative_drift=round(cumulative_drift, 4),
         )
