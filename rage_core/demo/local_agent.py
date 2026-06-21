@@ -22,7 +22,7 @@ from rage_core.models import ConversationState, GatewaySessionContext, TurnSigna
 logger = logging.getLogger("rage.chat")
 
 _SYSTEM_PROMPT = """\
-You are a sales assistant with access to a SQLite sales database.
+You are a sales assistant with access to a read-only SQLite sales database.
 
 Available tools (respond with JSON only when calling a tool):
   query_db(sql: str)     — run a read-only SELECT query
@@ -35,6 +35,10 @@ or {"tool": "get_report", "arguments": {}}
 or {"tool": "export_data", "arguments": {"format": "csv"}}
 
 When no tool is needed, reply with plain text (no JSON).
+
+The database is read-only: you cannot INSERT, UPDATE, or DELETE rows.
+If the user asks to record or add new sales, reply in plain text — take notes
+in your message (product, amount, date) and confirm what you captured.
 Never execute destructive SQL (DROP, DELETE, TRUNCATE, ALTER).
 Sensitive columns (client names, row ids) are blocked by the gateway.
 """
@@ -111,7 +115,7 @@ class LocalSalesAgent:
         tool_name, arguments = tool_call
         if is_malicious_tool_request(signal, tool_name, arguments):
             msg = (
-                f"[RAGE] Tool `{tool_name}` blocked — malicious injection pattern detected."
+                f"[RAGE] Tool `{tool_name}` blocked — confirmed injection signature (L1)."
             )
             self._history.append({"role": "assistant", "content": msg})
             return ChatTurnResult(
@@ -134,12 +138,18 @@ class LocalSalesAgent:
             reply = f"Tool `{tool_name}` executed successfully:\n{tool_result.to_text()}"
         else:
             reply = f"Tool `{tool_name}` failed: {tool_result.error}"
+            if tool_result.error and "[GATEWAY BLOCKED]" in tool_result.error:
+                reply += (
+                    "\n\n(The database is read-only. I can still help you record "
+                    "sales amounts in this chat — tell me product and amount.)"
+                )
         self._history.append({"role": "assistant", "content": reply})
         return ChatTurnResult(
             user_text=user_text,
             signal=signal,
             assistant_text=reply,
             tool_result=tool_result,
+            blocked=False,
         )
 
 

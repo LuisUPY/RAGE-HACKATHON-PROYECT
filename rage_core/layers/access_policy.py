@@ -18,18 +18,17 @@ def is_malicious_tool_request(
     tool_name: str | None,
     arguments: dict | None,
 ) -> bool:
-    """Block tools on confirmed user-text injection OR unsafe SQL in query_db args."""
+    """Block tools only on confirmed injection (L1 on user text or L1 on SQL args).
+
+    Gateway policy blocks (INSERT, non-allowlisted tables, etc.) are enforced
+    separately by ActionGateway — not treated as prompt injection.
+    """
     if is_confirmed_injection(signal):
         return True
     if tool_name == "query_db" and arguments:
-        sql = str(arguments.get("sql", ""))
-        if not sql:
-            return False
-        from rage_core.layers.gateway import _validate_sql
         from rage_core.layers.layer1_rules import DeterministicPreFilter
 
-        if DeterministicPreFilter().evaluate(sql).matched:
+        sql = str(arguments.get("sql", ""))
+        if sql and DeterministicPreFilter().evaluate(sql).matched:
             return True
-        safe, _ = _validate_sql(sql)
-        return not safe
     return False
