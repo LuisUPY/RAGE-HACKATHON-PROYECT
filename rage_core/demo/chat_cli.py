@@ -1,9 +1,18 @@
 """
 Interactive chat CLI: rage-chat
 
+Sales assistant protected by RAGE+Judge, backed by NVIDIA NIM.
+
+Setup:
+    export RAGE_LLM_BASE_URL=https://integrate.api.nvidia.com/v1
+    export RAGE_LLM_API_KEY=nvapi-...           (from build.nvidia.com)
+    export RAGE_LLM_MODEL=meta/llama-3.3-70b-instruct
+    export RAGE_JUDGE_MODEL=nvidia/llama-3.1-nemotron-nano-8b-v1
+    export RAGE_USE_LLM_JUDGE=1
+
 Usage:
     uv run rage-chat
-    uv run rage-chat --model qwen2.5:7b-instruct
+    uv run rage-chat --model meta/llama-3.1-70b-instruct
 """
 from __future__ import annotations
 
@@ -23,18 +32,23 @@ def _print_signal(signal) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="RAGE local chat with Ollama")
+    parser = argparse.ArgumentParser(description="RAGE sales chat — powered by NVIDIA NIM")
     parser.add_argument(
         "--model",
         default=None,
-        help="Ollama model name (default: OLLAMA_MODEL / RAGE_LLM_MODEL env)",
+        help="Model name override (default: RAGE_LLM_MODEL env var)",
     )
     args = parser.parse_args()
 
     if not has_llm_backend():
         print(
-            "No LLM backend configured.\n"
-            "Set OLLAMA_BASE_URL=http://localhost:11434/v1 (see windows-ollama/).",
+            "No LLM backend configured.\n\n"
+            "Setup NVIDIA NIM:\n"
+            "  export RAGE_LLM_BASE_URL=https://integrate.api.nvidia.com/v1\n"
+            "  export RAGE_LLM_API_KEY=nvapi-...       (from build.nvidia.com)\n"
+            "  export RAGE_LLM_MODEL=meta/llama-3.3-70b-instruct\n"
+            "  export RAGE_JUDGE_MODEL=nvidia/llama-3.1-nemotron-nano-8b-v1\n"
+            "  export RAGE_USE_LLM_JUDGE=1",
             file=sys.stderr,
         )
         return 1
@@ -46,11 +60,11 @@ def main() -> int:
         return 1
 
     agent = LocalSalesAgent(model=model)
-    print("RAGE Chat — sales assistant con protección de inyecciones")
-    print(f"Modelo: {model}")
-    print("Comandos: /quit  /status")
-    print("Tools disponibles: query_db · record_sale · get_report · export_data")
-    print("-" * 50)
+    print("RAGE Chat — Sales assistant (NVIDIA NIM + RAGE protection)")
+    print(f"Modelo   : {model}")
+    print("Comandos : /quit  /status")
+    print("Tools    : query_db · record_sale · get_report · export_data")
+    print("-" * 60)
 
     while True:
         try:

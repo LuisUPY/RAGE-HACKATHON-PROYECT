@@ -1,5 +1,12 @@
 """
-Local sales agent backed by Ollama (OpenAI-compatible API).
+Sales agent backed by NVIDIA NIM (OpenAI-compatible API).
+
+Backend: NVIDIA NIM — https://build.nvidia.com
+  export RAGE_LLM_BASE_URL=https://integrate.api.nvidia.com/v1
+  export RAGE_LLM_API_KEY=nvapi-...
+  export RAGE_LLM_MODEL=meta/llama-3.3-70b-instruct
+  export RAGE_JUDGE_MODEL=nvidia/llama-3.1-nemotron-nano-8b-v1
+  export RAGE_USE_LLM_JUDGE=1
 
 Access policy (injection-only):
   - Deny LLM + tools ONLY when Layer 1 matches a known malicious injection signature.
@@ -85,7 +92,12 @@ class LocalSalesAgent:
 
         client = get_llm_client()
         if client is None:
-            msg = "[ERROR] No LLM configured. Set OLLAMA_BASE_URL or OPENAI_API_KEY."
+            msg = (
+                "[ERROR] No LLM configured.\n"
+                "  export RAGE_LLM_BASE_URL=https://integrate.api.nvidia.com/v1\n"
+                "  export RAGE_LLM_API_KEY=nvapi-...\n"
+                "  export RAGE_LLM_MODEL=meta/llama-3.3-70b-instruct"
+            )
             return ChatTurnResult(user_text=user_text, signal=signal, assistant_text=msg)
 
         try:
