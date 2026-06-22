@@ -91,8 +91,9 @@ Copy `/last` output after interesting turns for notes or appendix material.
 ## Related
 
 - [PRODUCT_FOUNDATION.md](PRODUCT_FOUNDATION.md) — architecture overview
+- [PRODUCT_BENCHMARK.md](PRODUCT_BENCHMARK.md) — Track B automated benchmark (~20 cases)
 - `./scripts/run-profile-chat.sh` — earlier profile chat CLI (single API prompt)
-- Track B (~20 benchmark cases) — deferred; see project plan
+- `./scripts/run-bench-product.sh` — Track B batch runner with JSON/CSV export
 
 ## Environment variables (optional, non-interactive)
 

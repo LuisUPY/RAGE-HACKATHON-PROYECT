@@ -325,6 +325,23 @@ class TestEvalSimilarDataset:
         assert m.recall >= 0.90, f"similar multi-turn recall too low: {m.recall:.1%}"
 
 
+class TestEvalProductDataset:
+    def test_load_eval_product_holdout(self) -> None:
+        from rage_core.benchmark.product_dataset import load_product_holdout
+
+        cases = load_product_holdout()
+        assert 10 <= len(cases) <= 16
+        assert any(c.is_attack for c in cases)
+        assert any(not c.is_attack for c in cases)
+
+    def test_load_eval_product_scenarios(self) -> None:
+        from rage_core.benchmark.product_dataset import load_product_scenarios
+
+        scenarios = load_product_scenarios()
+        assert len(scenarios) >= 2
+        assert all(len(s.turns) >= 2 for s in scenarios)
+
+
 class TestEvalGeneralizationDataset:
     def test_load_eval_generalization_holdout(self) -> None:
         from rage_core.benchmark.dataset import load_eval_holdout_dataset

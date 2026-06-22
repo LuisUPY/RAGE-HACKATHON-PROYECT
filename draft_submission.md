@@ -127,9 +127,11 @@ CLI: `rage-product-demo` configura APIs duales (asistente + juez), muestra laten
 
 Esto no es producción multi-tenant; es **fundamento** para que cada cliente adapte contexto y el juez relacione el ataque con turnos anteriores.
 
+**Track B (benchmark automatizado):** `rage-bench-product` ejecuta ~20 casos verticales secuenciales vía `ChatGate` + perfil, registra veredictos y latencias en JSON/CSV, y `analyze_bench.py` reporta recall, FP, p50/p95 y tasa de override del juez.
+
 ### 3.5 Evaluación (dos capas — no confundir)
 
-**Capa A — Regresión (`pytest`):** 206 pruebas automatizadas en 8 módulos. Verifican contratos de código. Pasar pytest ≠ 100% recall en ataques. CI falla si el holdout duplica textos de la KB (`test_generalization_no_kb_text_overlap`).
+**Capa A — Regresión (`pytest`):** 232 pruebas automatizadas. Verifican contratos de código. Pasar pytest ≠ 100% recall en ataques. CI falla si el holdout duplica textos de la KB (`test_generalization_no_kb_text_overlap`).
 
 **Capa B — Seguridad open-world:** `./scripts/run-bench-generalization.sh` — 60 casos (30 ST + 12 escenarios MT) con textos **no** en `threats.json`. El test `test_generalization_combined_recall_band` exige recall 75–85% y 0 FP — un pipeline sobreajustado **no pasa CI**.
 
