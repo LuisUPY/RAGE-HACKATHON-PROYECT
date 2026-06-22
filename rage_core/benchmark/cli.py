@@ -19,6 +19,8 @@ Usage:
     uv run rage-bench --multi-turn        # escenarios multi-turno en vivo
     uv run rage-bench --multi-turn --eval-set practice
     uv run rage-bench --multi-turn --eval-set similar
+    uv run rage-bench --holdout --eval-set generalization --batch
+    uv run rage-bench --multi-turn --eval-set generalization --batch
 
 Exit code: 0 if accuracy >= 80% (closed KB). Holdout always exits 0 (métricas informativas).
 """
@@ -730,7 +732,7 @@ def main() -> int:
         "--eval-set",
         metavar="NAME",
         default=None,
-        help="Usar dataset de práctica alternativo (ej. practice). No cambia KB ni detección.",
+        help="Dataset alternativo: practice | open_v3 | similar | generalization (~80%% recall holdout)",
     )
     parser.add_argument(
         "--filter",

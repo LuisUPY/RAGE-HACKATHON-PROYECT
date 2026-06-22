@@ -325,6 +325,58 @@ class TestEvalSimilarDataset:
         assert m.recall >= 0.90, f"similar multi-turn recall too low: {m.recall:.1%}"
 
 
+class TestEvalGeneralizationDataset:
+    def test_load_eval_generalization_holdout(self) -> None:
+        from rage_core.benchmark.dataset import load_eval_holdout_dataset
+
+        cases = load_eval_holdout_dataset("generalization")
+        assert len(cases) >= 30
+        assert any(c.is_attack for c in cases)
+        assert any(not c.is_attack for c in cases)
+
+    def test_load_eval_generalization_scenarios(self) -> None:
+        from rage_core.benchmark.dataset import load_eval_scenarios
+
+        scenarios = load_eval_scenarios("generalization")
+        assert len(scenarios) >= 10
+        assert all(len(s.turns) >= 2 for s in scenarios)
+
+    def test_generalization_no_kb_text_overlap(self) -> None:
+        import json
+        from pathlib import Path
+
+        from rage_core.benchmark.dataset import load_eval_holdout_dataset, load_eval_scenarios
+
+        kb_texts: set[str] = set()
+        for name in ("threats.json", "benign.json"):
+            path = Path("rage_core/kb") / name
+            for entry in json.load(open(path, encoding="utf-8")):
+                kb_texts.add(entry["text"].lower().strip())
+
+        for case in load_eval_holdout_dataset("generalization"):
+            assert case.text.lower().strip() not in kb_texts, (
+                f"generalization {case.id} duplicates KB text"
+            )
+        for scenario in load_eval_scenarios("generalization"):
+            for turn in scenario.turns:
+                assert turn.text.lower().strip() not in kb_texts, (
+                    f"generalization {scenario.id} turn duplicates KB text"
+                )
+
+    def test_generalization_combined_recall_band(self) -> None:
+        """Generalization holdout targets ~80% recall — not 100%."""
+        from rage_core.benchmark.dataset import load_eval_holdout_dataset, load_eval_scenarios
+        from rage_core.benchmark.evaluator import compute_metrics, run_benchmark, run_multi_turn_benchmark
+
+        st = run_benchmark(load_eval_holdout_dataset("generalization"), use_judge=False, multi_turn=False)
+        mt = run_multi_turn_benchmark(load_eval_scenarios("generalization"), use_judge=False)
+        m = compute_metrics(st + mt)
+        assert m.fp == 0, f"generalization must not block benign (got {m.fp} FP)"
+        assert 0.75 <= m.recall <= 0.85, (
+            f"generalization recall should be ~80% (got {m.recall:.1%})"
+        )
+
+
 class TestMultiTurnBenchmark:
     def test_load_holdout_scenarios(self) -> None:
         from rage_core.benchmark.dataset import load_holdout_scenarios

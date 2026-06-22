@@ -10,6 +10,8 @@ Sources:
   5. Attack scenarios (rage_core/demo/attacks.py) — multi-turn scenarios.
   6. Holdout scenarios (holdout_scenarios.json + extended + comparison JSON files)
      — open-world multi-turn (Crescendo, salami slicing, comparison variants, etc.).
+  7. Eval sets (eval_practice, eval_open_v3, eval_similar, eval_generalization)
+     — alternate holdouts for practice and generalization testing.
 
 The KB entries are single-turn probe texts with ground-truth labels.
 Scenario turns capture realistic multi-turn structure (Crescendo, tool chains, etc.).
@@ -34,10 +36,12 @@ _HOLDOUT_SCENARIOS_COMPARISON_PATH = (
 _EVAL_PRACTICE_DIR = Path(__file__).parent.parent / "kb" / "eval_practice"
 _EVAL_OPEN_V3_DIR = Path(__file__).parent.parent / "kb" / "eval_open_v3"
 _EVAL_SIMILAR_DIR = Path(__file__).parent.parent / "kb" / "eval_similar"
+_EVAL_GENERALIZATION_DIR = Path(__file__).parent.parent / "kb" / "eval_generalization"
 REGISTERED_EVAL_SETS: dict[str, Path] = {
     "practice": _EVAL_PRACTICE_DIR,
     "open_v3": _EVAL_OPEN_V3_DIR,
     "similar": _EVAL_SIMILAR_DIR,
+    "generalization": _EVAL_GENERALIZATION_DIR,
 }
 
 
