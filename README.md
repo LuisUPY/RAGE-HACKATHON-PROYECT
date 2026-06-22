@@ -64,17 +64,23 @@ Deberías ver carpetas `demo`, `layers`, `training` dentro de `rage_core/`.
 
 ### Run the demo
 
-**Offline (recommended — no API key, ~5 seconds):**
+**Offline (CI / sin API key):**
+
+```bash
+uv run rage-demo --offline --core --no-plot
+```
+
+**Demo completa con juez LLM (pide tu API key NVIDIA/OpenAI al iniciar):**
 
 ```bash
 ./scripts/run-demo.sh
-# or
+# o
 uv run rage-demo
-uv run rage-demo --scenario drop_table_escalation --verbose
-uv run rage-demo --all --no-plot
+uv run rage-demo --core --verbose          # 14 escenarios multi-turno
+uv run rage-demo --scenario probe_subtle_board --verbose
 ```
 
-This runs attack scenarios in defended vs undefended mode, prints the AUC degradation report, and saves `auc_results.png`.
+~33 escenarios (18 multi-turno + 15 probes single-turn). El juez LLM evalúa casos sutiles que L1/L2 solos no capturan.
 
 **Interactive IT support chat (requires NVIDIA/OpenAI API key):**
 

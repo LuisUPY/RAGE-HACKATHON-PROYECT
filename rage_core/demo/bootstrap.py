@@ -33,13 +33,20 @@ def ensure_llm_ready(
     interactive: bool = True,
     verify: bool = True,
     require_judge: bool = False,
+    force_prompt: bool = False,
 ) -> tuple[bool, str]:
     """Configure LLM backend from .env or interactive prompt.
+
+    When force_prompt=True (demo default), always asks for API keys on TTY
+    even if .env exists — keys are session-only, not saved to disk.
 
     Returns (ok, message). Never raises.
     """
     ensure_env_loaded()
-    if _has_valid_key():
+    if force_prompt and interactive and sys.stdin.isatty():
+        if not prompt_session_api_keys():
+            return False, "Se canceló: faltan API keys."
+    elif _has_valid_key():
         os.environ.setdefault("RAGE_USE_LLM_JUDGE", "1")
         bootstrap_nvidia_master_key()
     elif interactive and sys.stdin.isatty():

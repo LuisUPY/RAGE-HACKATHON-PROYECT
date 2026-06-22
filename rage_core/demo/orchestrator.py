@@ -10,7 +10,11 @@ from dataclasses import dataclass, field
 
 from rage_core.demo.agent import SalesAgent, ToolResult
 from rage_core.demo.attacks import Turn
-from rage_core.layers.access_policy import is_attack_verdict, is_malicious_tool_request
+from rage_core.layers.access_policy import (
+    is_attack_verdict,
+    is_malicious_tool_request,
+    is_multiturn_attack_verdict,
+)
 from rage_core.layers.layer4_decision import DefensePipeline
 from rage_core.metrics.evaluator import CANARY, score_turn
 from rage_core.models import (
@@ -37,6 +41,7 @@ class TurnRecord:
     tool_result: ToolResult | None
     blocked: bool
     gt_score: int
+    judge_flagged: bool = False
 
 
 @dataclass
@@ -105,6 +110,8 @@ class ScenarioOrchestrator:
         state = ConversationState()
         agent = SalesAgent(defended=defended)
         records: list[TurnRecord] = []
+        prior_l2_peak = 0.0
+        prior_drift_peak = 0.0
 
         for idx, turn in enumerate(turns):
             signal: TurnSignal | None = None
@@ -115,7 +122,23 @@ class ScenarioOrchestrator:
 
             if defended and pipeline is not None:
                 signal = pipeline.evaluate(turn.user_text, state)
-                blocked = is_attack_verdict(signal, use_judge=self.use_judge)
+                if self.use_judge:
+                    blocked = is_multiturn_attack_verdict(
+                        signal,
+                        turn_index=idx,
+                        prior_l2_peak=prior_l2_peak,
+                        prior_drift_peak=prior_drift_peak,
+                        session_risk=state.session_risk_score,
+                        use_judge=True,
+                    )
+                else:
+                    blocked = is_attack_verdict(signal, use_judge=False)
+                prior_l2_peak = max(prior_l2_peak, signal.layer2.score)
+                prior_drift_peak = max(
+                    prior_drift_peak,
+                    signal.layer3.drift,
+                    signal.layer3.cumulative_drift,
+                )
 
             if not blocked:
                 if turn.tool_name:
@@ -149,9 +172,15 @@ class ScenarioOrchestrator:
                     )
 
             if blocked and defended:
-                detail = signal.layer1.pattern_id if signal and signal.layer1.matched else "policy"
+                if signal and signal.layer3.llm_flagged:
+                    detail = "Juez LLM"
+                elif signal and signal.layer1.matched:
+                    detail = signal.layer1.pattern_id
+                else:
+                    detail = "policy"
                 model_response = f"[RAGE BLOCKED — {detail}]"
 
+            judge_flagged = bool(signal and signal.layer3.llm_flagged)
             eval_signal = signal if signal is not None else _neutral_signal(idx, turn.user_text)
             gt_score = score_turn(eval_signal, gateway_verdict, model_response)
 
@@ -167,6 +196,7 @@ class ScenarioOrchestrator:
                     tool_result=tool_result,
                     blocked=blocked,
                     gt_score=gt_score,
+                    judge_flagged=judge_flagged,
                 )
             )
 
