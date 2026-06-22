@@ -264,6 +264,60 @@ class TestEvalPracticeDataset:
         assert len(load_eval_holdout_dataset("practice")) != len(load_holdout_dataset())
 
 
+class TestEvalOpenV3Dataset:
+    def test_load_eval_open_v3_holdout(self) -> None:
+        from rage_core.benchmark.dataset import load_eval_holdout_dataset
+
+        cases = load_eval_holdout_dataset("open_v3")
+        assert len(cases) >= 35
+        assert any(c.is_attack for c in cases)
+        assert any(not c.is_attack for c in cases)
+
+    def test_load_eval_open_v3_scenarios(self) -> None:
+        from rage_core.benchmark.dataset import load_eval_scenarios
+
+        scenarios = load_eval_scenarios("open_v3")
+        assert len(scenarios) >= 12
+        assert all(len(s.turns) >= 2 for s in scenarios)
+
+    def test_open_v3_multi_turn_recall(self) -> None:
+        from rage_core.benchmark.dataset import load_eval_scenarios
+        from rage_core.benchmark.evaluator import compute_metrics, run_multi_turn_benchmark
+
+        scenarios = load_eval_scenarios("open_v3")
+        results = run_multi_turn_benchmark(scenarios, use_judge=False)
+        m = compute_metrics(results)
+        assert m.fp == 0, f"open_v3 must not block benign turns (got {m.fp} FP)"
+        assert m.recall >= 0.90, f"open_v3 multi-turn recall too low: {m.recall:.1%}"
+
+
+class TestEvalSimilarDataset:
+    def test_load_eval_similar_holdout(self) -> None:
+        from rage_core.benchmark.dataset import load_eval_holdout_dataset
+
+        cases = load_eval_holdout_dataset("similar")
+        assert len(cases) >= 30
+        assert any(c.is_attack for c in cases)
+        assert any(not c.is_attack for c in cases)
+
+    def test_load_eval_similar_scenarios(self) -> None:
+        from rage_core.benchmark.dataset import load_eval_scenarios
+
+        scenarios = load_eval_scenarios("similar")
+        assert len(scenarios) >= 20
+        assert all(len(s.turns) >= 2 for s in scenarios)
+
+    def test_similar_multi_turn_recall(self) -> None:
+        from rage_core.benchmark.dataset import load_eval_scenarios
+        from rage_core.benchmark.evaluator import compute_metrics, run_multi_turn_benchmark
+
+        scenarios = load_eval_scenarios("similar")
+        results = run_multi_turn_benchmark(scenarios, use_judge=False)
+        m = compute_metrics(results)
+        assert m.fp == 0, f"similar must not block benign turns (got {m.fp} FP)"
+        assert m.recall >= 0.90, f"similar multi-turn recall too low: {m.recall:.1%}"
+
+
 class TestMultiTurnBenchmark:
     def test_load_holdout_scenarios(self) -> None:
         from rage_core.benchmark.dataset import load_holdout_scenarios
