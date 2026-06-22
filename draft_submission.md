@@ -115,7 +115,19 @@ Módulo `rage_core/training/` + directorio `Training-Center/` desarrollado duran
 
 Flujo: campaña Crescendo → JSON de resultados → insights accionables → *hot-update* de la KB sin reentrenar embeddings. Complemento: `rage-redteam` para loop adaptativo de bypass.
 
-### 3.4 Evaluación (dos capas — no confundir)
+### 3.4 Base de producto — chatbots adaptables (nuevo)
+
+Para validar la hipótesis de venta B2B (restaurante, soporte, reportes), añadimos una **capa mínima de producto**:
+
+1. **`BotProfile`** (JSON): rol, propósito, temas permitidos y acciones prohibidas por empresa.
+2. **`ChatGate`**: RAGE evalúa el turno; si hay riesgo, el **juez de sesión** recibe el *briefing* de RAGE + historial multi-turno + perfil del bot.
+3. **Veredicto**: `ALLOW` (falsa alarma), `BLOCK` (solo este mensaje), `DENY` (ataque confirmado).
+
+CLI: `rage-chat-profile --profile restaurant|support|reports` (modo `--offline` para pruebas sin API).
+
+Esto no es producción multi-tenant; es **fundamento** para que cada cliente adapte contexto y el juez relacione el ataque con turnos anteriores.
+
+### 3.5 Evaluación (dos capas — no confundir)
 
 **Capa A — Regresión (`pytest`):** 206 pruebas automatizadas en 8 módulos. Verifican contratos de código. Pasar pytest ≠ 100% recall en ataques. CI falla si el holdout duplica textos de la KB (`test_generalization_no_kb_text_overlap`).
 

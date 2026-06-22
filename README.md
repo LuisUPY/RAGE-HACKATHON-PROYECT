@@ -115,6 +115,15 @@ Template: [aisafetymexico/global-south-ais-template](https://github.com/aisafety
 Descarga directa del paper:  
 https://github.com/LuisUPY/RAGE-HACKATHON-PROYECT/raw/main/Documentation/GlobalSouth-RAGE-Submission.pdf
 
+**Product foundation (adaptable company chatbots):**
+
+```bash
+./scripts/run-profile-chat.sh --profile restaurant --offline   # sin API
+./scripts/run-profile-chat.sh --profile support                  # con juez + LLM
+```
+
+See [Documentation/PRODUCT_FOUNDATION.md](Documentation/PRODUCT_FOUNDATION.md).
+
 ### Run tests
 
 Two layers — **do not confuse them**:
