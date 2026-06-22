@@ -99,6 +99,16 @@ uv run rage-demo --support
 ./scripts/run-bench-generalization.sh --full   # with LLM judge
 ```
 
+**Global South hackathon submission (PDF ≤ 8 pages):**
+
+Template: [aisafetymexico/global-south-ais-template](https://github.com/aisafetymexico/global-south-ais-template)
+
+```bash
+# Edit draft_submission.md (authors, affiliations)
+./scripts/generate_submission_pdf.sh
+# → Documentation/GlobalSouth-RAGE-Submission.pdf
+```
+
 ### Run tests
 
 ```bash

@@ -6,7 +6,7 @@ cd "$ROOT"
 uv sync --quiet
 uv pip install fpdf2 -q
 
-MD="${1:-submission/GlobalSouth_RAGE_Submission.md}"
+MD="${1:-draft_submission.md}"
 PDF="${2:-Documentation/GlobalSouth-RAGE-Submission.pdf}"
 
 uv run python scripts/generate_paper_pdf.py "$MD" "$PDF"
@@ -20,7 +20,7 @@ print(len(re.findall(rb'/Type\s*/Page[^s]', data)))
 echo ""
 echo "Páginas: $PAGES (límite hackathon: 8)"
 if [[ "$PAGES" -gt 8 ]]; then
-  echo "ERROR: el PDF supera 8 páginas. Recorta submission/GlobalSouth_RAGE_Submission.md" >&2
+  echo "ERROR: el PDF supera 8 páginas. Recorta draft_submission.md" >&2
   exit 1
 fi
 echo "OK → $PDF"
