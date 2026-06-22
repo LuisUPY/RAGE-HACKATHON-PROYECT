@@ -28,6 +28,8 @@ User turn → [L1: Regex] → [L2: RAG KB] → [L3: Semantic Filter] → [L4: De
 
 ## Quick Start
 
+**Guía de comandos:** [QUICKSTART.md](QUICKSTART.md) — actualizar repo, tests, demos Track A/B, API keys.
+
 ### Requirements
 
 - [uv](https://docs.astral.sh/uv/) ≥ 0.4.27
@@ -52,7 +54,7 @@ ls rage_core pyproject.toml tests
 grep rage-multiturn pyproject.toml
 ```
 
-Deberías ver carpetas `demo`, `layers`, `training` dentro de `rage_core/`.
+Deberías ver carpetas `demo`, `layers`, `gate`, `profiles`, `benchmark`, `kb` dentro de `rage_core/`.
 
 > **No clones dentro de otra carpeta del mismo nombre** — evita
 > `RAGE-HACKATHON-PROYECT/RAGE-HACKATHON-PROYECT/`. Un solo nivel:
@@ -145,34 +147,11 @@ Two layers — **do not confuse them**:
 ./scripts/run-bench-generalization.sh
 ```
 
-See [tests/README.md](tests/README.md). Passing all pytest tests means the implementation is consistent; **attack recall on unseen prompts is ~80%**, not 100%.
+See [tests/README.md](tests/README.md) and [Documentation/EVALUATION.md](Documentation/EVALUATION.md). Passing all pytest tests means the implementation is consistent; **attack recall on unseen prompts is ~80%**, not 100%.
 
-### Run Crescendo red-teaming (Training-Center)
+### KB hardening (runtime)
 
-```bash
-uv sync                   # first time only (from repo root)
-uv run rage-training
-uv run rage-training-apply
-```
-
-Fallback without uv scripts:
-
-```bash
-uv run python -m rage_core.training.cli
-uv run python -m rage_core.training.apply
-```
-
-See [Training-Center/README.md](Training-Center/README.md) for ASR metrics and KB hardening loop.
-
-**Manual completo (PDF):** [Manuales/training-center-manual.pdf](Manuales/training-center-manual.pdf) — guía en español de `rage-training`, `rage-redteam` v3 y flujos de trabajo.
-
-### Windows 11 + Ollama (GPU local)
-
-Ver [windows-ollama/README.md](windows-ollama/README.md) para setup con NVIDIA RTX 5050, scripts PowerShell y `rage-chat`.
-
-### Mac M1 + Ollama (8 GB RAM)
-
-Ver [mac-ollama/README.md](mac-ollama/README.md) para setup en Apple Silicon, scripts bash y preset `m1-8gb.env`.
+Add threats at runtime without retraining (see [Threat KB Schema](#threat-kb-schema) below). For automated Crescendo campaigns (`rage-training`), see [ROADMAP.md](ROADMAP.md) — Training-Center lives on feature branches, not yet in `main`.
 
 ### Lint
 
@@ -271,26 +250,20 @@ The output figure `auc_results.png` shows:
 
 ```
 rage_core/
-  models.py              # dataclasses
-  layers/
-    layer1_rules.py      # regex pre-filter
-    layer2_rag.py        # RAG threat KB
-    layer3_semantic.py   # dynamic semantic filter (CORE)
-    layer4_decision.py   # decision engine + pipeline
-    gateway.py           # action gateway
-  kb/threats.json        # threat corpus
-  metrics/
-    auc_degradation.py   # AUC metric
-    evaluator.py         # ground-truth evaluator
-  demo/
-    agent.py             # SQLite mock agent
-    attacks.py           # multi-turn attack scenarios
-    cli.py               # rage-demo entry point
-Training-Center/         # Crescendo red-teaming automation (ASR, KB insights)
-  run_campaign.py        # uv run rage-training
-  apply_insights.py      # apply results → threats.json
-tests/                   # pytest suite
-Documentation/           # reference documents
+  layers/                # L1–L4 + SQL gateway
+  gate/ + judge/         # Track A: ChatGate + SessionJudge
+  profiles/              # restaurant, support, reports, practice
+  chat/                  # ProfileChatbot shell
+  benchmark/             # rage-bench, rage-bench-product
+  kb/                    # threats.json + holdouts (eval_generalization, eval_product, …)
+  metrics/               # AUC-D, ground-truth evaluator
+  demo/                  # rage-demo, SQLite agent, attack scenarios
+  llm/ + config/         # OpenAI-compatible client, dual API wizard
+scripts/                 # run-*.sh wrappers, dataset builders
+tests/                   # 232 pytest tests
+Documentation/           # evaluation, product docs, submission PDF
+QUICKSTART.md            # command cheat sheet
+ROADMAP.md               # main vs experimental branches
 ```
 
 ## Security Notes

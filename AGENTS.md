@@ -9,6 +9,7 @@ RAGE is a Python 3.12 **command-line / research tool** (no web UI, no server). I
 - The virtualenv lives at `.venv`; always run code through `uv run ...` so the right interpreter/deps are used.
 
 ### Common commands (run from repo root)
+- **Cheat sheet:** [QUICKSTART.md](../QUICKSTART.md)
 - Run app (offline, no API key): `uv run rage-demo --offline --core --no-plot`
 - Run app with detail + AUC plot: `uv run rage-demo --offline --scenario drop_table_escalation --verbose` (writes `auc_results.png`)
 - Tests: `./scripts/run-tests.sh` (or `uv run pytest tests/ -q`) — 232 tests.

@@ -26,3 +26,24 @@ jobs:
           python-version: "3.12"
       - run: uv sync
       - run: ./scripts/run-bench-generalization.sh
+
+  product-benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync
+      - run: ./scripts/run-bench-product.sh --offline --batch
+
+  lint:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync
+      - run: uv run ruff check .

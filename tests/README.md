@@ -6,7 +6,7 @@ RAGE uses **two separate evaluation layers**. Do not conflate them.
 
 **Command:** `./scripts/run-tests.sh` or `uv run pytest tests/ -v`
 
-~**206 automated tests** run on every change. They verify:
+**232 automated tests** run on every change. They verify:
 
 | Module | Focus |
 |--------|--------|
@@ -16,6 +16,8 @@ RAGE uses **two separate evaluation layers**. Do not conflate them.
 | `test_semantic_filter.py` | Cumulative drift, sanitizer |
 | `test_auc_metric.py` | AUC-D, TRI, hypotheses H1/H4 |
 | `test_access_policy.py` | Multi-turn verdict thresholds |
+| `test_chat_gate.py` | Track A ChatGate + session judge |
+| `test_product_benchmark.py` | Track B product dataset + evaluator |
 | `test_demo.py` | Demo orchestrator smoke |
 | `test_ollama_client.py` | LLM client config |
 
@@ -32,9 +34,18 @@ RAGE uses **two separate evaluation layers**. Do not conflate them.
 
 This is the honest security metric for papers and demos.
 
+## 3. Product benchmark (Track B)
+
+**Command:** `./scripts/run-bench-product.sh --offline --batch`
+
+~20 labeled cases on the Track A path (`BotProfile` → `ChatGate` → `SessionJudge`). Separate from generalization holdout.
+
 ## CI
 
 ```bash
 ./scripts/run-tests.sh -q
 ./scripts/run-bench-generalization.sh
+./scripts/run-bench-product.sh --offline --batch
 ```
+
+See also [QUICKSTART.md](../QUICKSTART.md) and [Documentation/EVALUATION.md](../Documentation/EVALUATION.md).

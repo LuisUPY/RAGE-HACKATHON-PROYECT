@@ -24,7 +24,7 @@ Russinovich et al. [1] demostraron que *Crescendo* evade defensas mono-turno: en
 
 1. **Filtro semántico dinámico con estado (L3):** drift acumulado Δ anclado a T0 + sanitización OWASP LLM08.
 2. **Métricas AUC-D y TRI:** evaluación temporal anti-circular basada en hechos observables.
-3. **Defensa de agente conectado:** cascada L1–L4 + gateway SQL + Training-Center para endurecimiento continuo de la KB.
+3. **Defensa de agente conectado:** cascada L1–L4 + gateway SQL + fundamento de producto (Track A/B) y *hot-update* de KB en runtime.
 
 ## 2. Trabajos relacionados
 
@@ -102,18 +102,11 @@ TRI = 0 sin beneficio; TRI = 1 resistencia máxima (baseline comprometido, defen
 
 El evaluador asigna v_t según *ground truth*: filtración de canary (+5), ejecución de SQL prohibido (+4), respuesta complaciente a override (+3), etc. Esto evita evaluación circular donde el sistema se califica a sí mismo.
 
-### 3.3 Training-Center (infraestructura del hackathon)
+### 3.3 Endurecimiento de KB y producto
 
-Módulo `rage_core/training/` + directorio `Training-Center/` desarrollado durante el hackathon:
+**En `main`:** *hot-update* en runtime vía `ThreatKBRetriever.add_threat()` (sin reentrenar embeddings). Track A (`rage-product-demo`) y Track B (`rage-bench-product`, ~20 casos) validan el camino `BotProfile` → `ChatGate` → juez de sesión.
 
-| Componente | Función |
-|------------|---------|
-| `orchestrator.py` | Ejecuta escenarios turno a turno con/sin RAGE |
-| `campaign.py` | Agrega ASR defended vs baseline |
-| `apply.py` | Aplica candidatos KB a `threats.json` |
-| CLI | `uv run rage-training` / `rage-training-apply` |
-
-Flujo: campaña Crescendo → JSON de resultados → insights accionables → *hot-update* de la KB sin reentrenar embeddings. Complemento: `rage-redteam` para loop adaptativo de bypass.
+**Experimental (rama `cursor/rage-v3-93a0`):** módulo `rage_core/training/` + `Training-Center/` para campañas Crescendo (`rage-training`, `rage-training-apply`). Ver [ROADMAP.md](ROADMAP.md).
 
 ### 3.4 Base de producto — chatbots adaptables (nuevo)
 
@@ -135,7 +128,7 @@ Esto no es producción multi-tenant; es **fundamento** para que cada cliente ada
 
 **Capa B — Seguridad open-world:** `./scripts/run-bench-generalization.sh` — 60 casos (30 ST + 12 escenarios MT) con textos **no** en `threats.json`. El test `test_generalization_combined_recall_band` exige recall 75–85% y 0 FP — un pipeline sobreajustado **no pasa CI**.
 
-**Demo y Training-Center.** 33 escenarios (`rage-demo`, juez LLM opcional). Training-Center (`rage-training`) ejecuta campañas Crescendo defended vs baseline y propone parches a la KB.
+**Demo.** 33 escenarios (`rage-demo`, juez LLM opcional). Ver [QUICKSTART.md](QUICKSTART.md).
 
 **Reproducir:** `uv sync` → `./scripts/validate-all.sh` → `./scripts/run-ablation.sh`
 
@@ -229,7 +222,7 @@ Override directo, jailbreak/DAN, inyección indirecta, *payload splitting*, Cres
 
 ### 4.4 Suite de regresión
 
-206 tests automatizados: gateway (55), benchmark (45), layers (33), semantic (17), AUC (17), access policy (10), demo (6), LLM client (23). Comando: `./scripts/run-tests.sh`.
+232 tests automatizados: gateway (55), benchmark (47), layers (33), semantic (17), AUC (17), access policy (10), chat gate (12), product benchmark (12), demo (6), LLM client (23). Comando: `./scripts/run-tests.sh`.
 
 ### 4.5 Demo de producto (33 escenarios)
 
@@ -243,7 +236,7 @@ Override directo, jailbreak/DAN, inyección indirecta, *payload splitting*, Cres
 
 **Limitaciones.** (1) TF-IDF por defecto menos denso que *transformers*. (2) ~20% FN sin juez en holdout. (3) **No medimos ASR end-to-end** contra GPT-4/Claude — agente simulado en demo. (4) Ratchet EWMA no participa en métricas de benchmark (solo demo/tests). (5) Holdout calibrado (~80%), no benchmark externo congelado tipo JailbreakBench. (6) Gateway regex vulnerable a ofuscaciones no listadas.
 
-**Doble uso (obligatorio).** Publicar umbrales Δ, EWMA y TRI permite optimizar trayectorias evasivas (*Crescendomation*). Training-Center puede usarse como banco adversarial offline. **Contramedidas:** calibración per-tenant, rate-limiting, gateway como última línea determinista, restringir Training-Center a CI aislado, no publicar umbrales de producción.
+**Doble uso (obligatorio).** Publicar umbrales Δ, EWMA y TRI permite optimizar trayectorias evasivas (*Crescendomation*). **Contramedidas:** calibración per-tenant, rate-limiting, gateway como última línea determinista, no publicar umbrales de producción.
 
 **Trabajo futuro.** Ablaciones publicadas (L1 vs L1+L2 vs L3 vs full), ASR con LLM comercial, SDK integrable, defensas many-shot [7].
 
