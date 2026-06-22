@@ -87,12 +87,12 @@ uv run rage-demo --scenario probe_subtle_board --verbose
 **Interactive IT support chat (requires NVIDIA/OpenAI API key):**
 
 ```bash
-./scripts/setup-env.sh          # once: create .env
-# edit .env → paste RAGE_NVIDIA_API_KEY=nvapi-...
 ./scripts/run-support-chat.sh
 # or full demo entry:
 uv run rage-demo --support
 ```
+
+API keys are prompted at startup each run (session-only; not stored in `.env`). Optional: `./scripts/setup-env.sh` creates `.env` with model URLs only.
 
 **Benchmark / generalization eval:**
 

@@ -88,19 +88,16 @@ Docs: [Documentation/PRODUCT_BENCHMARK.md](Documentation/PRODUCT_BENCHMARK.md)
 ## 8. Chat de soporte IT (requiere API key)
 
 ```bash
-./scripts/setup-env.sh          # una vez
-# Editar .env → RAGE_NVIDIA_API_KEY=nvapi-...
 ./scripts/run-support-chat.sh
 ```
 
+Al iniciar, el programa te pedirá la API key en pantalla (solo esa sesión; **no se guarda en `.env`**).
+
 ## 9. API keys (opcional)
 
-```bash
-cp .env.template .env
-# Pegar RAGE_NVIDIA_API_KEY o OPENAI_API_KEY
-```
+Las claves **no se almacenan en disco**. Cada comando en vivo (`run-support-chat.sh`, `run-product-demo.sh`, benchmarks `--live`, etc.) las pide al arrancar.
 
-Ver `.env.template` para URLs y modelos por defecto (NVIDIA NIM).
+Opcional: `./scripts/setup-env.sh` crea `.env` solo con URLs y modelos (ver `.env.template`). Para CI sin TTY, exporta `RAGE_LLM_API_KEY` o `OPENAI_API_KEY` en el entorno del job.
 
 ## 10. Lint
 
