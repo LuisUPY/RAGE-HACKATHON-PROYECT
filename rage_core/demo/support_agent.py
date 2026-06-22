@@ -20,7 +20,7 @@ from rage_core.layers.access_policy import (
     is_rag_confirmed_attack,
 )
 from rage_core.layers.layer4_decision import DefensePipeline
-from rage_core.llm.openai_compat import get_llm_client, get_llm_model, llm_judge_enabled
+from rage_core.llm.openai_compat import get_llm_client, get_llm_model, llm_judge_enabled, format_llm_api_error
 from rage_core.models import ConversationState, GatewaySessionContext, TurnSignal
 
 logger = logging.getLogger("rage.support")
@@ -134,7 +134,7 @@ class LocalSupportAgent:
             raw = (response.choices[0].message.content or "").strip()
         except Exception as exc:  # noqa: BLE001
             logger.warning("LLM call failed: %s", exc)
-            msg = f"[ERROR] LLM request failed: {exc}"
+            msg = format_llm_api_error(exc, model=self.model)
             self._update_context_peaks(signal)
             return ChatTurnResult(user_text=user_text, signal=signal, assistant_text=msg)
 

@@ -4,6 +4,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from rage_core.llm.openai_compat import sanitize_api_key
+
 _PLACEHOLDER_MARKERS = ("PEGAR_AQUI", "nvapi-...", "sk-...")
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -37,26 +39,38 @@ def load_env_file(path: Path | None = None) -> bool:
     return True
 
 
-def bootstrap_nvidia_master_key() -> None:
+def bootstrap_nvidia_master_key(*, force: bool = False) -> None:
     """Copy RAGE_NVIDIA_API_KEY into RAGE_LLM_API_KEY and RAGE_JUDGE_API_KEY if set."""
-    master = os.environ.get("RAGE_NVIDIA_API_KEY", "").strip()
-    if _is_placeholder(master):
+    master = sanitize_api_key(os.environ.get("RAGE_NVIDIA_API_KEY"))
+    if not force and _is_placeholder(master):
+        return
+    if not master:
         return
     os.environ["RAGE_LLM_API_KEY"] = master
     os.environ["RAGE_JUDGE_API_KEY"] = master
     os.environ.setdefault("RAGE_LLM_BASE_URL", "https://integrate.api.nvidia.com/v1")
     os.environ.setdefault("RAGE_JUDGE_BASE_URL", "https://integrate.api.nvidia.com/v1")
+    os.environ.setdefault("RAGE_LLM_MODEL", "meta/llama-3.3-70b-instruct")
+    os.environ.setdefault("RAGE_JUDGE_MODEL", "nvidia/llama-3.1-nemotron-nano-8b-v1")
     os.environ.setdefault("RAGE_USE_LLM_JUDGE", "1")
+
+
+def _clean_key(value: str | None) -> str:
+    return sanitize_api_key(value)
 
 
 def prompt_session_api_keys() -> bool:
     """Ask for API keys interactively each session (not saved to disk). Returns True if configured."""
-    # Clear any keys from a previous session or .env so we always prompt fresh.
+    # Clear prior session / .env secrets so we always prompt fresh.
     for key in (
         "RAGE_NVIDIA_API_KEY",
         "RAGE_LLM_API_KEY",
         "RAGE_JUDGE_API_KEY",
         "OPENAI_API_KEY",
+        "RAGE_LLM_BASE_URL",
+        "RAGE_JUDGE_BASE_URL",
+        "RAGE_LLM_MODEL",
+        "RAGE_JUDGE_MODEL",
     ):
         os.environ.pop(key, None)
 
@@ -66,20 +80,31 @@ def prompt_session_api_keys() -> bool:
     print("  Obtén clave NVIDIA: https://build.nvidia.com → API Keys")
     print("=" * 62)
 
-    nv_key = input("\nNVIDIA API key (nvapi-...): ").strip()
+    nv_key = sanitize_api_key(input("\nNVIDIA API key (nvapi-...): "))
     if nv_key:
+        if _is_placeholder(nv_key):
+            print("\nEsa clave parece un placeholder del template — pega tu clave real nvapi-...")
+            return False
+        if not nv_key.startswith("nvapi-"):
+            print("\nLa clave NVIDIA debe empezar por nvapi- (desde build.nvidia.com, no ngc.nvidia.com).")
+            return False
         os.environ["RAGE_NVIDIA_API_KEY"] = nv_key
-        bootstrap_nvidia_master_key()
-        judge_key = input("Juez API key (Enter = misma clave): ").strip()
+        bootstrap_nvidia_master_key(force=True)
+        judge_key = sanitize_api_key(input("Juez API key (Enter = misma clave): "))
         if judge_key:
             os.environ["RAGE_JUDGE_API_KEY"] = judge_key
         os.environ["RAGE_USE_LLM_JUDGE"] = "1"
         return True
 
     print("\n¿Usar OpenAI en su lugar?")
-    oa_key = input("OpenAI API key (sk-... o Enter para cancelar): ").strip()
+    oa_key = sanitize_api_key(input("OpenAI API key (sk-... o Enter para cancelar): "))
     if oa_key:
+        if _is_placeholder(oa_key):
+            print("\nEsa clave parece un placeholder del template — pega tu clave real sk-...")
+            return False
         os.environ["OPENAI_API_KEY"] = oa_key
+        os.environ.setdefault("RAGE_LLM_MODEL", "gpt-4o-mini")
+        os.environ.setdefault("RAGE_JUDGE_MODEL", "gpt-4o-mini")
         os.environ["RAGE_USE_LLM_JUDGE"] = "1"
         return True
 
