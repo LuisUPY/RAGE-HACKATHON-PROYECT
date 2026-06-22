@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Benchmark en vivo con juez LLM — vista estilo chat (pide API keys al iniciar).
+# Benchmark en vivo con juez LLM — pide API key al iniciar (no usa .env).
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"

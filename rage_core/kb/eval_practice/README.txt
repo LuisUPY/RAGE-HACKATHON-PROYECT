@@ -2,7 +2,7 @@
 #
 # Regenerar:  uv run python scripts/build_eval_practice.py
 #
-# Usar en benchmark (vista chat en vivo, siempre con juez LLM):
+# Benchmark en vivo (pide API key cada vez — no usa .env):
 #   ./scripts/run-bench-live.sh --holdout --eval-set practice
 #   ./scripts/run-bench-multi-live.sh --eval-set practice
 #   Modo tabla: añade --batch

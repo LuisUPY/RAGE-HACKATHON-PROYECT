@@ -368,7 +368,7 @@ def _run_all_demos(include_kb: bool = True, include_scenarios: bool = True) -> i
 
 
 def _ensure_judge_ready() -> int:
-    """Require LLM judge + API keys before any benchmark run."""
+    """Require LLM judge + fresh API keys before any benchmark run."""
     import os
 
     from rage_core.config.env_loader import ensure_env_loaded, prompt_session_api_keys
@@ -380,27 +380,34 @@ def _ensure_judge_ready() -> int:
     )
 
     os.environ["RAGE_USE_LLM_JUDGE"] = "1"
-    ensure_env_loaded()
 
-    if not has_llm_backend():
-        if sys.stdin.isatty():
-            print("\nBenchmark requiere juez LLM — introduce tus API keys.\n")
-            if not prompt_session_api_keys():
-                print("Se canceló: faltan API keys.", file=sys.stderr)
-                return 1
-        else:
+    if sys.stdin.isatty():
+        print("\nBenchmark con juez LLM — pega tu API key (solo esta sesión, no se guarda).\n")
+        if not prompt_session_api_keys():
+            print("Se canceló: faltan API keys.", file=sys.stderr)
+            return 1
+    else:
+        ensure_env_loaded()
+        if not has_llm_backend():
             print(
-                "ERROR: Benchmark requiere juez LLM.\n"
-                + diagnose_llm_setup(),
+                "ERROR: Benchmark requiere juez LLM.\n" + diagnose_llm_setup(),
                 file=sys.stderr,
             )
             return 1
 
     judge_model = get_judge_model("nvidia/llama-3.1-nemotron-nano-8b-v1")
     ok, err = verify_llm_connection(judge_model=judge_model)
+    if not ok and sys.stdin.isatty():
+        print(err, file=sys.stderr)
+        print("\nLa clave falló — vuelve a pegarla (build.nvidia.com → API Keys).\n")
+        if not prompt_session_api_keys():
+            return 1
+        ok, err = verify_llm_connection(judge_model=judge_model)
+
     if not ok:
         print(err, file=sys.stderr)
         return 1
+    print("✓ Juez LLM conectado.\n")
     return 0
 
 
