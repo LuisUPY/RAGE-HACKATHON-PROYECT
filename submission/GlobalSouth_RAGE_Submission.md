@@ -74,7 +74,7 @@ Ground-truth scores v_t ∈ {0,…,5} from observable outcomes (canary `ZEPHYR-7
 
 ### 3.3 Evaluation (two layers — do not conflate)
 
-**Regression (`pytest`):** 232 automated tests verify code contracts. Passing ≠ 100% attack detection.
+**Regression (`pytest`):** 233 automated tests verify code contracts. Passing ≠ 100% attack detection.
 
 **Open-world security:** `./scripts/run-bench-generalization.sh` — 60 holdout cases (texts **not** in `threats.json`). CI requires recall ∈ [75%, 85%] and 0% benign FP (`test_generalization_combined_recall_band`).
 
@@ -125,7 +125,7 @@ L2 and multi-turn context add ~3 pp over regex alone.
 
 ### 4.4 Regression suite
 
-232 tests: gateway (55), benchmark (47), layers (33), semantic (17), AUC (17), access policy (10), chat gate (12), product benchmark (12), demo (6), LLM client (23). Command: `./scripts/run-tests.sh`.
+233 tests: gateway (55), benchmark (47), layers (33), semantic (17), AUC (17), access policy (10), chat gate (12), product benchmark (12), demo (6), env_loader (1), LLM client (23). Command: `./scripts/run-tests.sh`.
 
 ## 5. Discussion and Limitations
 
@@ -163,6 +163,6 @@ Multi-turn injection against tool-connected agents is not solved by stateless fi
 
 **LLM Usage Statement:**
 
-LLMs (Cursor IDE, writing assistants, optional NVIDIA/OpenAI judge in demos) supported code development, documentation, and evaluation scenarios. Reported figures (80.6% recall, 100% precision, 232 tests, benchmark timings) were independently verified by all four authors using `pytest` and `./scripts/run-bench-generalization.sh`. The team assumes full responsibility for content and results.
+LLMs (Cursor IDE, writing assistants, optional NVIDIA/OpenAI judge in demos) supported code development, documentation, and evaluation scenarios. Reported figures (80.6% recall, 100% precision, 233 tests, benchmark timings) were independently verified by all four authors using `pytest` and `./scripts/run-bench-generalization.sh`. The team assumes full responsibility for content and results.
 
 **Template:** [aisafetymexico/global-south-ais-template](https://github.com/aisafetymexico/global-south-ais-template)

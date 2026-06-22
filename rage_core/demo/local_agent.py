@@ -1,13 +1,7 @@
 """
-Sales agent backed by NVIDIA NIM (OpenAI-compatible API).
+Sales agent backed by an OpenAI-compatible API (NVIDIA NIM by default).
 
-Backend: NVIDIA NIM — https://build.nvidia.com
-  export RAGE_LLM_BASE_URL=https://integrate.api.nvidia.com/v1
-  export RAGE_LLM_API_KEY=nvapi-...
-  export RAGE_LLM_MODEL=meta/llama-3.3-70b-instruct
-  export RAGE_JUDGE_MODEL=nvidia/llama-3.1-nemotron-nano-8b-v1
-  export RAGE_USE_LLM_JUDGE=1
-
+API keys are prompted at runtime in interactive CLIs (session-only).
 Access policy (injection-only):
   - Deny LLM + tools ONLY when Layer 1 matches a known malicious injection signature.
   - All other pipeline signals (L2/L3, warn/block bands) are logged but do not restrict use.
@@ -65,7 +59,7 @@ class ChatTurnResult:
 
 @dataclass
 class LocalSalesAgent:
-    """RAGE-defended agent with Ollama as the LLM backend."""
+    """RAGE-defended agent with an OpenAI-compatible LLM backend."""
 
     pipeline: DefensePipeline = field(default_factory=DefensePipeline)
     sales_agent: SalesAgent = field(default_factory=lambda: SalesAgent(defended=True))
@@ -112,7 +106,7 @@ class LocalSalesAgent:
             )
             raw = (response.choices[0].message.content or "").strip()
         except Exception as exc:  # noqa: BLE001
-            logger.warning("Ollama call failed: %s", exc)
+            logger.warning("LLM call failed: %s", exc)
             msg = f"[ERROR] LLM request failed: {exc}"
             return ChatTurnResult(user_text=user_text, signal=signal, assistant_text=msg)
 

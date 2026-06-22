@@ -17,8 +17,8 @@ Plantilla oficial: https://github.com/aisafetymexico/global-south-ais-template
 
 | Archivo | Descripción |
 |---------|-------------|
-| `draft_submission.md` | Fuente principal (**inglés**, con figuras embebidas) |
-| `submission/GlobalSouth_RAGE_Submission.md` | Copia sincronizada |
+| `draft_submission.md` | **Editar solo este archivo** (inglés, figuras embebidas) |
+| `submission/GlobalSouth_RAGE_Submission.md` | Copia auto-generada al correr `generate_submission_pdf.sh` |
 | `Documentation/figures/rage_pipeline.png` | Figura 1 — pipeline end-to-end |
 | `Documentation/figures/rage_layers.png` | Figura 2 — capas L1–L4 |
 | `Documentation/GlobalSouth-RAGE-Submission.pdf` | PDF final (máx. 8 páginas) |

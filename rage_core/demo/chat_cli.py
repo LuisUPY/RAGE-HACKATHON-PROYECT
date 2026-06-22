@@ -27,6 +27,13 @@ def _print_signal(signal) -> None:
 
 
 def main() -> int:
+    import warnings
+
+    warnings.warn(
+        "rage-chat is deprecated; use: uv run rage-product-demo --profile restaurant",
+        DeprecationWarning,
+        stacklevel=1,
+    )
     parser = argparse.ArgumentParser(description="RAGE sales chat — powered by NVIDIA NIM")
     parser.add_argument(
         "--model",

@@ -13,18 +13,30 @@ bash scripts/check_setup.sh    # debe decir "Estructura OK"
 uv sync
 ```
 
-## 2. Validación completa (release / hackathon)
+## 2. ¿Qué comando uso?
+
+| Necesidad | Comando | Script |
+|-----------|---------|--------|
+| Investigación / AUC / SQLite | `rage-demo` | `./scripts/run-demo.sh` |
+| Chat empresa + dual API | `rage-product-demo` | `./scripts/run-product-demo.sh` |
+| Soporte IT interactivo | `rage-chat-support` | `./scripts/run-support-chat.sh` |
+| Métrica seguridad (holdout) | — | `./scripts/run-bench-generalization.sh` |
+| Benchmark producto Track B | `rage-bench-product` | `./scripts/run-bench-product.sh` |
+
+Legacy (deprecated): `rage-chat-profile` / `run-profile-chat.sh` → usar `rage-product-demo`.
+
+## 3. Validación completa (release / hackathon)
 
 ```bash
 ./scripts/validate-all.sh
 ```
 
-Ejecuta: setup check → 232 tests → benchmark producto → generalización → ablation → PDF.
+Ejecuta: setup check → 233 tests → benchmark producto → generalización → ablation → PDF.
 
-## 3. Tests
+## 4. Tests
 
 ```bash
-# Regresión (contratos de código — 232 tests)
+# Regresión (contratos de código — 233 tests)
 ./scripts/run-tests.sh
 
 # Equivalente
@@ -35,7 +47,7 @@ En Mac (y en general), usa **`uv run pytest`** en lugar del Python del sistema (
 
 **Importante:** pasar pytest **no** significa 100% detección de ataques.
 
-## 4. Benchmark de seguridad (métrica honesta)
+## 5. Benchmark de seguridad (métrica honesta)
 
 ```bash
 ./scripts/run-bench-generalization.sh          # ~1s, offline
@@ -44,7 +56,7 @@ En Mac (y en general), usa **`uv run pytest`** en lugar del Python del sistema (
 
 Recall objetivo **~80%** en holdout fuera de la KB; algunos `FN` son esperados.
 
-## 5. Demo investigación (`rage-demo`)
+## 6. Demo investigación (`rage-demo`)
 
 ```bash
 # Sin API key
@@ -60,7 +72,7 @@ uv run rage-demo --offline --core
 ./scripts/run-demo.sh
 ```
 
-## 6. Track A — demo de producto (chat por perfil)
+## 7. Track A — demo de producto (chat por perfil)
 
 ```bash
 # Sin API key
@@ -75,7 +87,7 @@ uv run rage-demo --offline --core
 
 Docs: [Documentation/PRODUCT_DEMO.md](Documentation/PRODUCT_DEMO.md)
 
-## 7. Track B — benchmark de producto (~20 casos)
+## 8. Track B — benchmark de producto (~20 casos)
 
 ```bash
 ./scripts/run-bench-product.sh --offline --batch
@@ -85,7 +97,7 @@ uv run python scripts/analyze_bench.py results/product_run.json
 
 Docs: [Documentation/PRODUCT_BENCHMARK.md](Documentation/PRODUCT_BENCHMARK.md)
 
-## 8. Chat de soporte IT (requiere API key)
+## 9. Chat de soporte IT (requiere API key)
 
 ```bash
 ./scripts/run-support-chat.sh
@@ -93,13 +105,13 @@ Docs: [Documentation/PRODUCT_BENCHMARK.md](Documentation/PRODUCT_BENCHMARK.md)
 
 Al iniciar, el programa te pedirá la API key en pantalla (solo esa sesión; **no se guarda en `.env`**).
 
-## 9. API keys (opcional)
+## 10. API keys (opcional)
 
 Las claves **no se almacenan en disco**. Cada comando en vivo (`run-support-chat.sh`, `run-product-demo.sh`, benchmarks `--live`, etc.) las pide al arrancar.
 
 Opcional: `./scripts/setup-env.sh` crea `.env` solo con URLs y modelos (ver `.env.template`). Para CI sin TTY, exporta `RAGE_LLM_API_KEY` o `OPENAI_API_KEY` en el entorno del job.
 
-## 10. Lint
+## 11. Lint
 
 ```bash
 uv run ruff check .
@@ -107,7 +119,7 @@ uv run ruff check .
 
 El repo tiene violaciones de estilo preexistentes; el CI las reporta pero no bloquea el merge.
 
-## 11. Documentación clave
+## 12. Documentación clave
 
 | Archivo | Contenido |
 |---------|-----------|
@@ -115,6 +127,8 @@ El repo tiene violaciones de estilo preexistentes; el CI las reporta pero no blo
 | [Documentation/EVALUATION.md](Documentation/EVALUATION.md) | Qué significan los números (leer antes de citar) |
 | [tests/README.md](tests/README.md) | Tests vs benchmark de seguridad |
 | [ROADMAP.md](ROADMAP.md) | Qué está en main vs ramas experimentales |
+| [scripts/README.md](scripts/README.md) | Índice de scripts |
+| [rage_core/kb/README.md](rage_core/kb/README.md) | Datasets y holdouts |
 | [AGENTS.md](AGENTS.md) | Notas para Cursor Cloud |
 
 ## Flujo mínimo diario

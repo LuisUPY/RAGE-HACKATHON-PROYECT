@@ -6,7 +6,7 @@ RAGE uses **two separate evaluation layers**. Do not conflate them.
 
 **Command:** `./scripts/run-tests.sh` or `uv run pytest tests/ -v`
 
-**232 automated tests** run on every change. They verify:
+**233 automated tests** run on every change. They verify:
 
 | Module | Focus |
 |--------|--------|
@@ -19,7 +19,8 @@ RAGE uses **two separate evaluation layers**. Do not conflate them.
 | `test_chat_gate.py` | Track A ChatGate + session judge |
 | `test_product_benchmark.py` | Track B product dataset + evaluator |
 | `test_demo.py` | Demo orchestrator smoke |
-| `test_ollama_client.py` | LLM client config |
+| `test_env_loader.py` | .env loading skips API secrets |
+| `test_openai_compat.py` | LLM/judge client config |
 
 **What “all tests pass” means:** the implementation matches its specified behavior.  
 **What it does NOT mean:** 100% attack detection on unseen prompts.

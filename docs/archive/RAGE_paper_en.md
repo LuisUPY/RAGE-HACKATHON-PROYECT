@@ -1,5 +1,7 @@
 # RAGE: Robust Agentic Security Gateway for Text-to-SQL — Defending Against Multi-Turn Crescendo Attacks
 
+> **Archived extended paper.** Training-Center and Ollama modules described here are on experimental branches, not `main`. See [ROADMAP.md](../../ROADMAP.md) and [draft_submission.md](../../draft_submission.md) for the shipped product.
+
 **Authors:** RAGE Research Team  
 **Venue:** Global South AI Safety Hackathon, June 2026  
 **Repository:** `rage-multiturn` — Python 3.12, MIT License  

@@ -10,7 +10,7 @@
 | Track B — `rage-bench-product` (~20 casos) | ✅ |
 | Holdout `eval_generalization` (~80% recall) | ✅ |
 | Hot-update de KB en runtime (`ThreatKBRetriever.add_threat`) | ✅ |
-| 232 tests + CI (regresión + generalización) | ✅ |
+| 233 tests + CI (regresión + generalización) | ✅ |
 | Submission Global South (PDF) | ✅ |
 
 ## No incluido en `main` (ramas `cursor/*`)
@@ -23,7 +23,9 @@ Estos módulos aparecen en papers o README históricos pero **no están mergeado
 | `windows-ollama/` | `cursor/windows-ollama-setup-93a0` | Ollama en Windows + GPU |
 | `mac-ollama/` | `cursor/mac-ollama-setup-93a0` | Ollama en Apple Silicon |
 
-Para endurecer la KB **sin** Training-Center, usa la API de hot-update documentada en [README.md](README.md#add-a-new-threat-at-runtime-hot-update-no-retraining).
+Papers extendidos con Training-Center: [docs/archive/](docs/archive/) (no reflejan solo `main`).
+
+Para endurecer la KB **sin** Training-Center, usa la API de hot-update documentada en [README.md](README.md#add-a-new-threat-at-runtime-hot-update).
 
 ## Próximos pasos sugeridos
 

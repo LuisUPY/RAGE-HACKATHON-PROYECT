@@ -20,7 +20,7 @@ This document states **what the numbers actually measure**. Required reading for
 
 This is **intellectually honest** for a hackathon if disclosed. It is **not** equivalent to JailbreakBench or Crescendo paper ASR.
 
-## What pytest 232 tests mean
+## What pytest 233 tests mean
 
 Regression tests for code contracts (gateway blocks DROP, drift computed, Track A/B product path, etc.). **Passing ≠ 100% attack detection.**
 
@@ -34,7 +34,7 @@ Regression tests for code contracts (gateway blocks DROP, drift computed, Track 
 ## Recommended citations in the paper
 
 - ✅ “80.6% recall on out-of-KB holdout (L1+L2, 0% FP)”
-- ✅ “232 automated regression tests”
+- ✅ “233 automated regression tests”
 - ✅ “Crescendo scenario blocked at gateway + policy layer”
 - ❌ “100% success on 108 tests” (deprecated)
 - ❌ “End-to-end LLM ASR reduced to X%” (not measured)
