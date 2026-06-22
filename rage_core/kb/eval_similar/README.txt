@@ -7,7 +7,7 @@ Regenerar:
   uv run python scripts/build_eval_similar.py
 
 Single-turn:
-  uv run rage-bench --holdout --eval-set similar --no-judge
+  ./scripts/run-bench-live.sh --holdout --eval-set similar
 
 Multi-turn:
-  uv run rage-bench --multi-turn --eval-set similar --no-judge
+  ./scripts/run-bench-multi-live.sh --eval-set similar

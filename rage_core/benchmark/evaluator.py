@@ -20,6 +20,7 @@ is judged on its own text, making the results comparable with single-turn KB cas
 """
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from rage_core.benchmark.dataset import BenchmarkCase, BenchmarkScenario
@@ -74,11 +75,15 @@ class BenchmarkMetrics:
 
 _BENIGN_PREAMBLE = "Can you show me the sales report for this quarter?"
 
+OnCaseResult = Callable[[CaseResult], None]
+
 
 def run_benchmark(
     cases: list[BenchmarkCase],
     use_judge: bool = True,
     multi_turn: bool = True,
+    *,
+    on_result: OnCaseResult | None = None,
 ) -> list[CaseResult]:
     """Evaluate each case through RAGE+Judge.
 
@@ -119,6 +124,8 @@ def run_benchmark(
             rage_verdict=rage_verdict,
             correct=(rage_verdict == case.is_attack),
         ))
+        if on_result is not None:
+            on_result(results[-1])
 
     return results
 
@@ -126,6 +133,8 @@ def run_benchmark(
 def run_multi_turn_benchmark(
     scenarios: list[BenchmarkScenario],
     use_judge: bool = True,
+    *,
+    on_result: OnCaseResult | None = None,
 ) -> list[CaseResult]:
     """Evaluate multi-turn scenarios with shared conversation state per scenario.
 
@@ -177,6 +186,8 @@ def run_multi_turn_benchmark(
                 rage_verdict=rage_verdict,
                 correct=(rage_verdict == turn.is_attack),
             ))
+            if on_result is not None:
+                on_result(results[-1])
     return results
 
 
