@@ -118,18 +118,27 @@ https://github.com/LuisUPY/RAGE-HACKATHON-PROYECT/raw/main/Documentation/GlobalS
 **Product foundation (adaptable company chatbots):**
 
 ```bash
-./scripts/run-profile-chat.sh --profile restaurant --offline   # sin API
-./scripts/run-profile-chat.sh --profile support                  # con juez + LLM
+./scripts/run-product-demo.sh                              # Track A — dual API + latencia
+./scripts/run-product-demo.sh --profile restaurant --offline
+./scripts/run-profile-chat.sh --profile support            # CLI anterior
 ```
 
-See [Documentation/PRODUCT_FOUNDATION.md](Documentation/PRODUCT_FOUNDATION.md).
+See [Documentation/PRODUCT_DEMO.md](Documentation/PRODUCT_DEMO.md), [Documentation/PRODUCT_BENCHMARK.md](Documentation/PRODUCT_BENCHMARK.md), and [Documentation/PRODUCT_FOUNDATION.md](Documentation/PRODUCT_FOUNDATION.md).
+
+**Track B product benchmark (~20 cases):**
+
+```bash
+./scripts/run-bench-product.sh --offline --batch          # CI
+./scripts/run-bench-product.sh --live --output results/product_run.json
+uv run python scripts/analyze_bench.py results/product_run.json
+```
 
 ### Run tests
 
 Two layers — **do not confuse them**:
 
 ```bash
-# 1. Regression (206 automated tests — code contracts)
+# 1. Regression (232 automated tests — code contracts)
 ./scripts/run-tests.sh
 
 # 2. Open-world security benchmark (~80% recall holdout, 0% FP)
