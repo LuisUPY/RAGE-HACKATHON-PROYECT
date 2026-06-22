@@ -19,8 +19,9 @@ from __future__ import annotations
 import argparse
 import sys
 
+from rage_core.demo.bootstrap import ensure_llm_ready
 from rage_core.demo.local_agent import LocalSalesAgent
-from rage_core.llm.openai_compat import get_llm_client, get_llm_model, has_llm_backend
+from rage_core.llm.openai_compat import get_llm_client, get_llm_model
 
 
 def _print_signal(signal) -> None:
@@ -40,17 +41,9 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    if not has_llm_backend():
-        print(
-            "No LLM backend configured.\n\n"
-            "Setup NVIDIA NIM:\n"
-            "  export RAGE_LLM_BASE_URL=https://integrate.api.nvidia.com/v1\n"
-            "  export RAGE_LLM_API_KEY=nvapi-...       (from build.nvidia.com)\n"
-            "  export RAGE_LLM_MODEL=meta/llama-3.3-70b-instruct\n"
-            "  export RAGE_JUDGE_MODEL=nvidia/llama-3.1-nemotron-nano-8b-v1\n"
-            "  export RAGE_USE_LLM_JUDGE=1",
-            file=sys.stderr,
-        )
+    ok, err = ensure_llm_ready(interactive=True, verify=True, require_judge=False)
+    if not ok:
+        print(err, file=sys.stderr)
         return 1
 
     model = args.model or get_llm_model()

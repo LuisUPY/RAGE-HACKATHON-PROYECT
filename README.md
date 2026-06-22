@@ -64,19 +64,33 @@ Deberías ver carpetas `demo`, `layers`, `training` dentro de `rage_core/`.
 
 ### Run the demo
 
+**Offline (recommended — no API key, ~5 seconds):**
+
 ```bash
+./scripts/run-demo.sh
+# or
 uv run rage-demo
+uv run rage-demo --scenario drop_table_escalation --verbose
+uv run rage-demo --all --no-plot
 ```
 
-This runs all three scenarios (DROP TABLE escalation, canary leak, benign conversation) in both defended and undefended modes, prints the AUC report, and saves a plot to `auc_results.png`.
+This runs attack scenarios in defended vs undefended mode, prints the AUC degradation report, and saves `auc_results.png`.
 
-Run a single scenario:
+**Interactive IT support chat (requires NVIDIA/OpenAI API key):**
 
 ```bash
-uv run rage-demo --scenario drop_table_escalation
-uv run rage-demo --scenario canary_leak
-uv run rage-demo --scenario benign_conversation
-uv run rage-demo --no-plot  # skip matplotlib
+./scripts/setup-env.sh          # once: create .env
+# edit .env → paste RAGE_NVIDIA_API_KEY=nvapi-...
+./scripts/run-support-chat.sh
+# or full demo entry:
+uv run rage-demo --support
+```
+
+**Benchmark / generalization eval:**
+
+```bash
+./scripts/run-bench-generalization.sh          # ~1s offline
+./scripts/run-bench-generalization.sh --full   # with LLM judge
 ```
 
 ### Run tests

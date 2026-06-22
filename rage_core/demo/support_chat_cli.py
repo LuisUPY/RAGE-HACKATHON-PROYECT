@@ -8,16 +8,13 @@ from __future__ import annotations
 import argparse
 import sys
 
-from rage_core.config.env_loader import prompt_session_api_keys
+from rage_core.demo.bootstrap import ensure_llm_ready
 from rage_core.demo.support_agent import LocalSupportAgent
 from rage_core.llm.openai_compat import (
-    diagnose_llm_setup,
     get_judge_model,
     get_llm_client,
     get_llm_model,
-    has_llm_backend,
     llm_judge_enabled,
-    verify_llm_connection,
 )
 
 
@@ -61,12 +58,9 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    if not prompt_session_api_keys():
-        return 1
-
-    if not has_llm_backend():
-        print("No se pudo configurar el backend LLM.", file=sys.stderr)
-        print(diagnose_llm_setup(), file=sys.stderr)
+    ok, err = ensure_llm_ready(interactive=True, verify=not args.no_verify, require_judge=True)
+    if not ok:
+        print(err, file=sys.stderr)
         return 1
 
     client = get_llm_client()
@@ -78,15 +72,7 @@ def main() -> int:
     judge_model = get_judge_model("nvidia/llama-3.1-nemotron-nano-8b-v1")
 
     if not args.no_verify:
-        print("\nVerificando conexión con el LLM...")
-        ok, err = verify_llm_connection(
-            model=model,
-            judge_model=judge_model if llm_judge_enabled() else None,
-        )
-        if not ok:
-            print(err, file=sys.stderr)
-            return 1
-        print("✓ Conexión OK")
+        print("\n✓ LLM conectado.")
 
     agent = LocalSupportAgent(model=model)
 

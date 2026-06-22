@@ -32,6 +32,19 @@ CREATE TABLE IF NOT EXISTS sales (
     client  TEXT    NOT NULL,
     region  TEXT    NOT NULL
 );
+CREATE TABLE IF NOT EXISTS products (
+    name  TEXT PRIMARY KEY,
+    price REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS system_config (
+    config_key   TEXT PRIMARY KEY,
+    config_value TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS audit_log (
+    id    INTEGER PRIMARY KEY,
+    event TEXT NOT NULL,
+    actor TEXT NOT NULL
+);
 """
 
 _SEED_DATA = [
@@ -42,14 +55,36 @@ _SEED_DATA = [
     (5, "Gadget B",   1100.75, "Epsilon Co",  "North"),
 ]
 
+_SEED_PRODUCTS = [
+    ("Widget A", 99.99),
+    ("Gadget B", 149.50),
+    ("Doohickey C", 49.00),
+]
+
+_SEED_CONFIG = [
+    ("api_mode", "production"),
+    ("export_limit", "aggregated"),
+]
+
+_SEED_AUDIT = [
+    (1, "login", "analyst@corp.local"),
+    (2, "export", "sales_bot"),
+]
+
 
 def _create_db() -> sqlite3.Connection:
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
-    conn.execute(_SCHEMA)
+    for stmt in _SCHEMA.strip().split(";"):
+        sql = stmt.strip()
+        if sql:
+            conn.execute(sql)
     conn.executemany(
         "INSERT INTO sales VALUES (?,?,?,?,?)", _SEED_DATA
     )
+    conn.executemany("INSERT INTO products VALUES (?,?)", _SEED_PRODUCTS)
+    conn.executemany("INSERT INTO system_config VALUES (?,?)", _SEED_CONFIG)
+    conn.executemany("INSERT INTO audit_log VALUES (?,?,?)", _SEED_AUDIT)
     conn.commit()
     return conn
 
