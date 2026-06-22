@@ -75,7 +75,7 @@ def _arrow(ax, x1, y1, x2, y2) -> None:
 
 def figure_layers_modular(path: Path) -> None:
     """Figure 2 — L1–L4 modular architecture (parallel layers → decision)."""
-    fig, ax = plt.subplots(figsize=(10, 5.5))
+    fig, ax = plt.subplots(figsize=(9, 5.8))
     ax.set_xlim(0, 10)
     ax.set_ylim(0, 6)
     ax.axis("off")
@@ -111,55 +111,52 @@ def figure_layers_modular(path: Path) -> None:
     _arrow(ax, 3.5, 2.95, 5.8, 3.2)
     _arrow(ax, 3.5, 1.05, 5.8, 2.6)
 
-    ax.set_title("Figure 2 — RAGE layered defense (L1–L4)", fontsize=11, fontweight="bold", pad=12)
+    ax.set_title("Figure 2 — RAGE layered defense (L1–L4)", fontsize=12, fontweight="bold", pad=12)
     fig.tight_layout()
-    fig.savefig(path, dpi=200, bbox_inches="tight", facecolor="white")
+    fig.savefig(path, dpi=220, bbox_inches="tight", facecolor="white")
     plt.close(fig)
 
 
 def figure_end_to_end(path: Path) -> None:
-    """Figure 1 — End-to-end pipeline with gateway and metrics."""
-    fig, ax = plt.subplots(figsize=(10, 2.8))
-    ax.set_xlim(0, 16)
-    ax.set_ylim(0, 3)
+    """Figure 1 — Vertical end-to-end pipeline (readable in PDF column)."""
+    fig, ax = plt.subplots(figsize=(5.5, 8))
+    ax.set_xlim(0, 6)
+    ax.set_ylim(0, 10)
     ax.axis("off")
 
     steps = [
-        ("User", 0.2, 1.0, 1.1, 0.9),
-        ("L1\nRegex", 1.5, 1.0, 1.0, 0.9),
-        ("L2\nRAG/KB", 2.7, 1.0, 1.0, 0.9),
-        ("L3\nDrift", 3.9, 1.0, 1.0, 0.9),
-        ("L4\nDecision", 5.1, 1.0, 1.15, 0.9),
-        ("SQL\nGateway", 6.5, 1.0, 1.15, 0.9),
-        ("SQLite\nAgent", 7.9, 1.0, 1.15, 0.9),
-        ("AUC-D /\nTRI", 9.3, 1.0, 1.15, 0.9),
+        "User message",
+        "L1 — Regex",
+        "L2 — RAG / threats.json",
+        "L3 — Semantic drift (δ, Δ)",
+        "L4 — Decision (score / band)",
+        "SQL Gateway",
+        "SQLite Agent",
+        "AUC-D / TRI evaluator",
     ]
-    centers = []
-    for label, x, y, w, h in steps:
+    cx, bw, bh = 3.0, 4.2, 0.72
+    y = 9.0
+    prev_cy = None
+    for label in steps:
         rect = FancyBboxPatch(
-            (x, y),
-            w,
-            h,
-            boxstyle="round,pad=0.02,rounding_size=0.06",
-            linewidth=1.2,
-            edgecolor=BOX_EDGE,
-            facecolor=BOX_FACE,
-            zorder=2,
+            (cx - bw / 2, y), bw, bh,
+            boxstyle="round,pad=0.02,rounding_size=0.08",
+            linewidth=1.3, edgecolor=BOX_EDGE, facecolor=BOX_FACE, zorder=2,
         )
         ax.add_patch(rect)
-        ax.text(x + w / 2, y + h / 2, label, ha="center", va="center", fontsize=7.5,
-                color=TEXT_COLOR, linespacing=1.15)
-        centers.append((x + w, y + h / 2, x, y + h / 2))
+        ax.text(cx, y + bh / 2, label, ha="center", va="center", fontsize=10,
+                color=TEXT_COLOR, fontweight="bold" if label == "User message" else "normal")
+        cy = y + bh / 2
+        if prev_cy is not None:
+            _arrow(ax, cx, prev_cy - bh / 2 - 0.02, cx, y + bh + 0.02)
+        prev_cy = cy
+        y -= 1.05
 
-    for i in range(len(centers) - 1):
-        x1, y1, x2, _ = centers[i][0], centers[i][1], centers[i + 1][2], centers[i + 1][3]
-        _arrow(ax, x1 + 0.05, y1, x2 - 0.05, y1)
-
-    ax.text(8.0, 0.35, "Tool calls blocked before destructive SQL executes",
-            ha="center", fontsize=8, color=SUBTEXT, style="italic")
-    ax.set_title("Figure 1 — End-to-end RAGE pipeline", fontsize=11, fontweight="bold", pad=10)
+    ax.text(cx, 0.35, "Destructive tool calls blocked before SQL executes",
+            ha="center", fontsize=9, color=SUBTEXT, style="italic")
+    ax.set_title("Figure 1 — End-to-end RAGE pipeline", fontsize=12, fontweight="bold", pad=14)
     fig.tight_layout()
-    fig.savefig(path, dpi=200, bbox_inches="tight", facecolor="white")
+    fig.savefig(path, dpi=220, bbox_inches="tight", facecolor="white")
     plt.close(fig)
 
 

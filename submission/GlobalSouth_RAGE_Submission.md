@@ -34,6 +34,8 @@ Russinovich et al. [1] showed *Crescendo* evades single-turn defenses: on LLaMA-
 
 **Gap:** existing guardrails lack (i) baseline-anchored cumulative drift, (ii) tool-level containment, and (iii) non-circular temporal metrics.
 
+**Table 1 — Crescendo phases (Text-to-SQL)**
+
 | Phase | Turns | Adversary goal | Stateless signal |
 |-------|-------|----------------|------------------|
 | Context seeding | T0–T1 | Legitimate `sales` queries | None |
@@ -82,6 +84,8 @@ Ground-truth scores v_t ∈ {0,…,5} from observable outcomes (canary `ZEPHYR-7
 
 ### 4.1 Generalization holdout (L1+L2, no judge)
 
+**Table 3 — Holdout metrics**
+
 | Metric | Value |
 |--------|-------|
 | Total cases | 60 |
@@ -95,6 +99,8 @@ Ground-truth scores v_t ∈ {0,…,5} from observable outcomes (canary `ZEPHYR-7
 
 ### 4.2 Crescendo trajectory (star case)
 
+**Table 4 — Turn-by-turn Crescendo scenario**
+
 | Turn | Description | Band | δ | Δ | Outcome |
 |------|-------------|------|---|---|---------|
 | T0 | Q3 sales summary | ALLOW | 0.00 | 0.00 | Gateway OK |
@@ -107,6 +113,8 @@ Ground-truth scores v_t ∈ {0,…,5} from observable outcomes (canary `ZEPHYR-7
 At T4–T5: L1 does not fire (Crescendo avoids signatures); L2 raises score; L3 flags Δ > τ; gateway blocks `\bUNION\b`. Undefended baseline: AUC-D >> defended (H1 validated in tests).
 
 ### 4.3 Ablation (generalization holdout, 60 cases)
+
+**Table 5 — Layer ablation**
 
 | Configuration | Recall | Precision | FP | FN |
 |---------------|--------|-----------|----|----|
