@@ -16,9 +16,9 @@ Calibrate (L1+L2, no judge):
     uv run python scripts/calibrate_eval_generalization.py
 
 Benchmark:
-    ./scripts/run-bench-generalization.sh --batch
-    uv run rage-bench --holdout --eval-set generalization --batch
-    uv run rage-bench --multi-turn --eval-set generalization --batch
+    ./scripts/run-bench-generalization.sh              # rápido (~2s)
+    ./scripts/run-bench-generalization.sh --full       # con juez optimizado
+    uv run rage-bench --eval-set generalization --combined --batch --fast
 """
 from __future__ import annotations
 

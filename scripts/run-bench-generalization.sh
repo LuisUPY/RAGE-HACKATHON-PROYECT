@@ -1,36 +1,59 @@
 #!/usr/bin/env bash
-# Benchmark generalization (~80%% recall holdout) — pide API key al iniciar.
+# Benchmark generalization (~80% recall) — optimizado para uso diario.
+#
+# Por defecto: --combined --batch --fast  (~2s, L1+L2, sin API key)
+# Con juez LLM: añade --full            (~15-30s, una sola API key)
 #
 # Uso:
-#   ./scripts/run-bench-generalization.sh           # vista chat en vivo
-#   ./scripts/run-bench-generalization.sh --batch   # tabla resumida
-#   ./scripts/run-bench-generalization.sh --batch --filter fn   # solo FN
+#   ./scripts/run-bench-generalization.sh
+#   ./scripts/run-bench-generalization.sh --full
+#   ./scripts/run-bench-generalization.sh --filter fn
+#   ./scripts/run-bench-generalization.sh --full --filter fn
 #
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 uv sync --quiet
 
-EXTRA=("$@")
-HAS_BATCH=false
-for arg in "${EXTRA[@]}"; do
+FULL=false
+BENCH_ARGS=()
+for arg in "$@"; do
+  if [[ "$arg" == "--full" ]]; then
+    FULL=true
+  else
+    BENCH_ARGS+=("$arg")
+  fi
+done
+
+MODE=(--eval-set generalization --combined --batch)
+if [[ "$FULL" == true ]]; then
+  MODE+=()   # juez ON (optimizado: skip L1/L2 confirmados)
+else
+  MODE+=(--fast)
+fi
+
+# --batch implícito en combined; pasar --filter etc.
+HAS_BATCH=true
+for arg in "${BENCH_ARGS[@]}"; do
   [[ "$arg" == "--batch" ]] && HAS_BATCH=true
 done
 
 echo ""
 echo "══════════════════════════════════════════════════════════════"
-echo "  GENERALIZATION HOLDOUT — eval-set generalization (~80% recall)"
+if [[ "$FULL" == true ]]; then
+  echo "  GENERALIZATION — L1+L2+Juez (optimizado, pide API key)"
+else
+  echo "  GENERALIZATION — L1+L2 rápido (~2s, sin API key)"
+fi
 echo "══════════════════════════════════════════════════════════════"
 echo ""
 
-echo "▶ Single-turn (30 casos: 20 ataques + 10 benignos)"
-uv run rage-bench --holdout --eval-set generalization "${EXTRA[@]}"
-
-echo ""
-echo "▶ Multi-turn (12 escenarios, 16 turnos de ataque)"
-uv run rage-bench --multi-turn --eval-set generalization "${EXTRA[@]}"
+uv run rage-bench "${MODE[@]}" "${BENCH_ARGS[@]}"
 
 if [[ "$HAS_BATCH" == true ]]; then
   echo ""
-  echo "Tip: --filter fn muestra solo ataques no detectados (FN esperados ~20%)."
+  if [[ "$FULL" == false ]]; then
+    echo "Tip: --full activa el juez LLM en casos borderline (~15-30s)."
+  fi
+  echo "Tip: --filter fn muestra solo ataques no detectados (FN ~20%)."
 fi

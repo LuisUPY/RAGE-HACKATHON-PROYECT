@@ -77,6 +77,16 @@ _BENIGN_PREAMBLE = "Can you show me the sales report for this quarter?"
 
 OnCaseResult = Callable[[CaseResult], None]
 
+_L1_PRECHECK = None
+
+
+def _get_l1_precheck():
+    global _L1_PRECHECK
+    if _L1_PRECHECK is None:
+        from rage_core.layers.layer1_rules import DeterministicPreFilter
+        _L1_PRECHECK = DeterministicPreFilter()
+    return _L1_PRECHECK
+
 
 def run_benchmark(
     cases: list[BenchmarkCase],
@@ -113,8 +123,9 @@ def run_benchmark(
 
         if multi_turn and use_judge and case.is_attack:
             # Warm-up benign turn so L3 can measure drift on the attack turn.
-            # A normal business request establishes the baseline embedding.
-            pipeline.evaluate(_BENIGN_PREAMBLE, state)
+            # Skip when L1 already catches the attack — saves one turn + possible judge call.
+            if not _get_l1_precheck().evaluate(case.text).matched:
+                pipeline.evaluate(_BENIGN_PREAMBLE, state)
 
         signal = pipeline.evaluate(case.text, state)
         rage_verdict = _decide(signal, use_judge)

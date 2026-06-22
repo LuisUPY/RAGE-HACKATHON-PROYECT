@@ -1,7 +1,7 @@
 """Access control policy — when to deny LLM/tools vs. telemetry-only scoring."""
 from __future__ import annotations
 
-from rage_core.models import TurnSignal
+from rage_core.models import Layer2Signal, TurnSignal
 
 # L2 cosine similarity thresholds — tiered for open-world generalization.
 # Calibrated on closed KB + holdout benign corpus (max benign L2 ≈ 0.61, medium severity).
@@ -9,16 +9,21 @@ RAG_ATTACK_THRESHOLD: float = 0.70          # high-confidence KB match
 RAG_ATTACK_THRESHOLD_SOFT: float = 0.55     # medium match + high/critical severity only
 
 
-def is_rag_confirmed_attack(signal: TurnSignal) -> bool:
-    """Return True when text matches a known KB attack via L2 RAG (tiered)."""
-    if not signal.layer2.top_match_id:
+def is_rag_confirmed_from_l2(l2: Layer2Signal) -> bool:
+    """Return True when L2 alone confirms a KB attack match (tiered thresholds)."""
+    if not l2.top_match_id:
         return False
-    score = signal.layer2.score
+    score = l2.score
     if score >= RAG_ATTACK_THRESHOLD:
         return True
-    if score >= RAG_ATTACK_THRESHOLD_SOFT and signal.layer2.severity in ("critical", "high"):
+    if score >= RAG_ATTACK_THRESHOLD_SOFT and l2.severity in ("critical", "high"):
         return True
     return False
+
+
+def is_rag_confirmed_attack(signal: TurnSignal) -> bool:
+    """Return True when text matches a known KB attack via L2 RAG (tiered)."""
+    return is_rag_confirmed_from_l2(signal.layer2)
 
 
 def is_confirmed_injection(signal: TurnSignal) -> bool:

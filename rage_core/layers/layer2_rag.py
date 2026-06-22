@@ -179,3 +179,14 @@ class ThreatKBRetriever:
 
     def _embed_query(self, text: str) -> np.ndarray:
         return self._embedder.embed([text])[0]
+
+
+_RETRIEVER: ThreatKBRetriever | None = None
+
+
+def get_threat_kb_retriever() -> ThreatKBRetriever:
+    """Shared KB retriever — index built once per process (benchmark speed)."""
+    global _RETRIEVER
+    if _RETRIEVER is None:
+        _RETRIEVER = ThreatKBRetriever()
+    return _RETRIEVER

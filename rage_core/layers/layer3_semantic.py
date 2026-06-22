@@ -135,6 +135,22 @@ def _llm_judge(prev_summary: str, current_turn: str) -> bool:
         return False
 
 
+_JUDGE_CACHE: dict[tuple[str, str], bool] = {}
+_JUDGE_CACHE_MAX = 512
+
+
+def _llm_judge_cached(prev_summary: str, current_turn: str) -> bool:
+    """Memoized LLM judge — identical turns skip network round-trip."""
+    key = (_sanitize(prev_summary), _sanitize(current_turn))
+    cached = _JUDGE_CACHE.get(key)
+    if cached is not None:
+        return cached
+    result = _llm_judge(prev_summary, current_turn)
+    if len(_JUDGE_CACHE) < _JUDGE_CACHE_MAX:
+        _JUDGE_CACHE[key] = result
+    return result
+
+
 # --------------------------------------------------------------------------- #
 # Dynamic Semantic Filter                                                      #
 # --------------------------------------------------------------------------- #
@@ -164,7 +180,13 @@ class DynamicSemanticFilter:
 
     # ----------------------------------------------------------------------- #
 
-    def evaluate(self, turn_text: str, state: ConversationState) -> Layer3Signal:
+    def evaluate(
+        self,
+        turn_text: str,
+        state: ConversationState,
+        *,
+        skip_llm_judge: bool = False,
+    ) -> Layer3Signal:
         """Evaluate a single turn in the context of the conversation state.
 
         This method is STATELESS with respect to ``state`` — it reads state
@@ -202,11 +224,11 @@ class DynamicSemanticFilter:
         # 4. Flag if *either* drift signal exceeds the threshold
         suspicious = drift > self._threshold or cumulative_drift > self._threshold
 
-        # 5. LLM judge (expensive — only on suspicion)
+        # 5. LLM judge (expensive — only on suspicion, skip if L1/L2 already confirmed)
         llm_flagged = False
-        if suspicious and self._use_llm:
+        if suspicious and self._use_llm and not skip_llm_judge:
             prev_summary = state.intent_summaries[-1] if state.intent_summaries else ""
-            llm_flagged = _llm_judge(prev_summary, turn_text)
+            llm_flagged = _llm_judge_cached(prev_summary, turn_text)
 
         # 6. Produce intent summary (sanitized — UNTRUSTED content)
         summary = _sanitize(turn_text[:150])

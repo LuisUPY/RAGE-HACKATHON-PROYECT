@@ -21,6 +21,8 @@ Usage:
     uv run rage-bench --multi-turn --eval-set similar
     uv run rage-bench --holdout --eval-set generalization --batch
     uv run rage-bench --multi-turn --eval-set generalization --batch
+    uv run rage-bench --eval-set generalization --combined --batch --fast   # ~2s, sin juez
+    uv run rage-bench --eval-set generalization --combined --batch        # con juez (optimizado)
 
 Exit code: 0 if accuracy >= 80% (closed KB). Holdout always exits 0 (métricas informativas).
 """
@@ -458,6 +460,92 @@ def _make_multi_turn_live_callback(
     return on_result, results_acc
 
 
+def _run_combined_eval(
+    eval_set: str,
+    *,
+    verbose: bool,
+    by_category: bool,
+    filter_arg: str | None,
+    batch: bool,
+    live_delay: float,
+    live_pause: bool,
+    use_judge: bool,
+) -> int:
+    """Single-turn + multi-turn eval set in one process (one API key prompt)."""
+    import time
+
+    t0 = time.perf_counter()
+    cases = load_eval_holdout_dataset(eval_set)
+    scenarios = load_eval_scenarios(eval_set)
+    case_summary = dataset_summary(cases)
+    scen_summary = scenario_summary(scenarios)
+    title = f"Evaluación COMBINADA (eval-set={eval_set})"
+    mode_label = "L1+L2+Juez (optimizado)" if use_judge else "L1+L2 (--fast)"
+
+    if batch:
+        print()
+        print("=" * (sum(_COL.values()) + len(_COL) * 3))
+        print(f"  RAGE — {title}")
+        print(
+            f"  Single: {case_summary['total']} casos  |  "
+            f"Multi: {scen_summary['scenarios']} escenarios / {scen_summary['turns']} turnos"
+        )
+        print(f"  Modo: {mode_label}")
+        print("=" * (sum(_COL.values()) + len(_COL) * 3))
+        print()
+        print("Evaluando...", end=" ", flush=True)
+        st_results = run_benchmark(cases, use_judge=use_judge, multi_turn=use_judge)
+        mt_results = run_multi_turn_benchmark(scenarios, use_judge=use_judge)
+        print(f"OK ({len(st_results) + len(mt_results)} turnos)")
+    else:
+        from rage_core.llm.openai_compat import get_judge_model
+
+        judge_model = get_judge_model("nvidia/llama-3.1-nemotron-nano-8b-v1") if use_judge else "—"
+        print_benchmark_banner(
+            title=title,
+            subtitle=(
+                f"{case_summary['total']} ST + {scen_summary['turns']} MT turnos  ·  {mode_label}"
+            ),
+            judge_model=judge_model,
+        )
+        st_results = run_benchmark(cases, use_judge=use_judge, multi_turn=use_judge)
+        on_result, _acc = _make_multi_turn_live_callback(
+            scenarios,
+            delay_sec=live_delay,
+            pause_between_scenarios=live_pause,
+        )
+        mt_results = run_multi_turn_benchmark(scenarios, use_judge=use_judge, on_result=on_result)
+
+    results = st_results + mt_results
+    elapsed = time.perf_counter() - t0
+    print()
+
+    display = _filter_results(results, filter_arg)
+    if verbose:
+        display = results
+    elif filter_arg is None:
+        display = [r for r in results if not r.correct]
+
+    if display and batch:
+        _print_header()
+        for r in display:
+            _print_row(r)
+        if not verbose and filter_arg is None:
+            print()
+            print(f"  (mostrando {len(display)} errores — usa --verbose para ver todos)")
+
+    metrics = compute_metrics(results)
+    _print_metrics(metrics, use_judge=use_judge)
+    _print_scenario_summary(compute_scenario_metrics(scenarios, mt_results), scenarios)
+    _print_holdout_failures(results)
+    if by_category:
+        _print_category_metrics(compute_category_metrics(results))
+
+    print()
+    print(f"  Tiempo total: {elapsed:.1f}s  ({len(results)} evaluaciones)")
+    return 0
+
+
 def _run_holdout(
     *,
     verbose: bool,
@@ -467,8 +555,12 @@ def _run_holdout(
     eval_set: str | None = None,
     batch: bool = False,
     live_delay: float = 0.35,
+    use_judge: bool = True,
 ) -> int:
     """Open-world evaluation on holdout cases never seen in the training KB."""
+    import time
+
+    t0 = time.perf_counter()
     if rag_threshold is not None:
         import rage_core.layers.access_policy as policy
 
@@ -483,7 +575,8 @@ def _run_holdout(
     summary = dataset_summary(cases)
 
     from rage_core.llm.openai_compat import get_judge_model
-    judge_model = get_judge_model("nvidia/llama-3.1-nemotron-nano-8b-v1")
+    judge_model = get_judge_model("nvidia/llama-3.1-nemotron-nano-8b-v1") if use_judge else "—"
+    mode_label = "L1+L2+Juez (optimizado)" if use_judge else "L1+L2 (--fast)"
 
     if batch:
         print()
@@ -491,11 +584,11 @@ def _run_holdout(
         print(f"  RAGE — {title}")
         print(f"  Dataset: {summary['total']} casos  "
               f"({summary['attacks']} ataques / {summary['benign']} benignos)")
-        print(f"  Juez LLM: ACTIVO  ·  {judge_model}")
+        print(f"  Modo: {mode_label}" + (f"  ·  {judge_model}" if use_judge else ""))
         print("=" * (sum(_COL.values()) + len(_COL) * 3))
         print()
         print("Evaluando casos holdout...", end=" ", flush=True)
-        results = run_benchmark(cases, use_judge=True)
+        results = run_benchmark(cases, use_judge=use_judge, multi_turn=use_judge)
         print(f"OK ({len(results)} casos)")
     else:
         print_benchmark_banner(
@@ -516,7 +609,7 @@ def _run_holdout(
                 delay_sec=live_delay,
             )
 
-        results = run_benchmark(cases, use_judge=True, on_result=on_case_counted)
+        results = run_benchmark(cases, use_judge=use_judge, multi_turn=use_judge, on_result=on_case_counted)
     print()
 
     display = _filter_results(results, filter_arg)
@@ -534,14 +627,16 @@ def _run_holdout(
             print(f"  (mostrando {len(display)} errores — usa --verbose para ver todos)")
 
     metrics = compute_metrics(results)
-    _print_metrics(metrics, use_judge=True)
+    _print_metrics(metrics, use_judge=use_judge)
     _print_holdout_failures(results)
     if by_category:
         _print_category_metrics(compute_category_metrics(results))
 
+    elapsed = time.perf_counter() - t0
     error_rate = 1.0 - metrics.accuracy
     print()
     print(f"  Tasa de error real: {error_rate * 100:.1f}%  ({metrics.total - metrics.correct} de {metrics.total} casos)")
+    print(f"  Tiempo: {elapsed:.1f}s")
     return 0
 
 
@@ -573,8 +668,12 @@ def _run_multi_turn(
     batch: bool = False,
     live_delay: float = 0.35,
     live_pause: bool = False,
+    use_judge: bool = True,
 ) -> int:
     """Multi-turn open-world evaluation with accumulated conversation context."""
+    import time
+
+    t0 = time.perf_counter()
     if eval_set:
         scenarios = load_eval_scenarios(eval_set)
         title = f"Evaluación MULTI-TURNO PRÁCTICA (eval-set={eval_set})"
@@ -587,18 +686,19 @@ def _run_multi_turn(
 
     summary = scenario_summary(scenarios)
     from rage_core.llm.openai_compat import get_judge_model
-    judge_model = get_judge_model("nvidia/llama-3.1-nemotron-nano-8b-v1")
+    judge_model = get_judge_model("nvidia/llama-3.1-nemotron-nano-8b-v1") if use_judge else "—"
+    mode_label = "L1+L2+Juez (optimizado)" if use_judge else "L1+L2 (--fast)"
 
     if batch:
         print()
         print("=" * (sum(_COL.values()) + len(_COL) * 3))
         print(f"  RAGE — {title}")
         print(f"  Escenarios: {summary['scenarios']}  |  Turnos: {summary['turns']}")
-        print(f"  Juez LLM: ACTIVO  ·  {judge_model}")
+        print(f"  Modo: {mode_label}" + (f"  ·  {judge_model}" if use_judge else ""))
         print("=" * (sum(_COL.values()) + len(_COL) * 3))
         print()
         print("Evaluando escenarios...", end=" ", flush=True)
-        results = run_multi_turn_benchmark(scenarios, use_judge=True)
+        results = run_multi_turn_benchmark(scenarios, use_judge=use_judge)
         print(f"OK ({len(results)} turnos)")
     else:
         print_benchmark_banner(
@@ -614,7 +714,7 @@ def _run_multi_turn(
             delay_sec=live_delay,
             pause_between_scenarios=live_pause,
         )
-        results = run_multi_turn_benchmark(scenarios, use_judge=True, on_result=on_result)
+        results = run_multi_turn_benchmark(scenarios, use_judge=use_judge, on_result=on_result)
     print()
 
     display = _filter_results(results, filter_arg)
@@ -632,15 +732,17 @@ def _run_multi_turn(
             print(f"  (mostrando {len(display)} errores — usa --verbose para ver todos)")
 
     metrics = compute_metrics(results)
-    _print_metrics(metrics, use_judge=True)
+    _print_metrics(metrics, use_judge=use_judge)
     _print_scenario_summary(compute_scenario_metrics(scenarios, results), scenarios)
     _print_holdout_failures(results)
     if by_category:
         _print_category_metrics(compute_category_metrics(results))
 
+    elapsed = time.perf_counter() - t0
     error_rate = 1.0 - metrics.accuracy
     print()
     print(f"  Tasa de error (turnos): {error_rate * 100:.1f}%")
+    print(f"  Tiempo: {elapsed:.1f}s")
     return 0
 
 
@@ -735,12 +837,23 @@ def main() -> int:
         help="Dataset alternativo: practice | open_v3 | similar | generalization (~80%% recall holdout)",
     )
     parser.add_argument(
+        "--fast",
+        action="store_true",
+        help="Solo L1+L2, sin juez LLM ni prompt de API key (~instante)",
+    )
+    parser.add_argument(
+        "--combined",
+        action="store_true",
+        help="Single-turn + multi-turn en una ejecución (requiere --eval-set)",
+    )
+    parser.add_argument(
         "--filter",
         metavar="OUTCOME",
         choices=["tp", "tn", "fp", "fn", "TP", "TN", "FP", "FN"],
         help="Mostrar solo un tipo de resultado: tp / tn / fp / fn",
     )
     args = parser.parse_args()
+    use_judge = not args.fast
 
     if args.demo:
         if _ensure_judge_ready() != 0:
@@ -755,7 +868,24 @@ def main() -> int:
             include_scenarios=not args.kb_only,
         )
 
-    if _ensure_judge_ready() != 0:
+    if args.combined:
+        if not args.eval_set:
+            print("ERROR: --combined requiere --eval-set NAME", file=sys.stderr)
+            return 1
+        if use_judge and _ensure_judge_ready() != 0:
+            return 1
+        return _run_combined_eval(
+            args.eval_set,
+            verbose=args.verbose,
+            by_category=args.by_category,
+            filter_arg=args.filter,
+            batch=args.batch,
+            live_delay=args.live_delay,
+            live_pause=args.live_pause,
+            use_judge=use_judge,
+        )
+
+    if use_judge and _ensure_judge_ready() != 0:
         return 1
 
     if args.multi_turn:
@@ -767,6 +897,7 @@ def main() -> int:
             batch=args.batch,
             live_delay=args.live_delay,
             live_pause=args.live_pause,
+            use_judge=use_judge,
         )
 
     if args.holdout:
@@ -778,6 +909,7 @@ def main() -> int:
             eval_set=args.eval_set,
             batch=args.batch,
             live_delay=args.live_delay,
+            use_judge=use_judge,
         )
 
     include_kb = not args.scenarios_only and not args.benign_kb_only
@@ -798,23 +930,24 @@ def main() -> int:
 
     summary = dataset_summary(cases)
     from rage_core.llm.openai_compat import get_judge_model
-    judge_model = get_judge_model("nvidia/llama-3.1-nemotron-nano-8b-v1")
+    judge_model = get_judge_model("nvidia/llama-3.1-nemotron-nano-8b-v1") if use_judge else "—"
 
     if args.batch:
         print()
         print("=" * (sum(_COL.values()) + len(_COL) * 3))
-        print("  RAGE+Judge Benchmark")
+        print("  RAGE Benchmark")
         print(f"  Dataset: {summary['total']} casos  "
               f"({summary['attacks']} ataques / {summary['benign']} benignos)")
-        print(f"  Juez LLM: ACTIVO  ·  {judge_model}")
+        mode_label = "L1+L2+Juez" if use_judge else "L1+L2 (--fast)"
+        print(f"  Modo: {mode_label}" + (f"  ·  {judge_model}" if use_judge else ""))
         print("=" * (sum(_COL.values()) + len(_COL) * 3))
         print()
         print("Evaluando casos...", end=" ", flush=True)
-        results = run_benchmark(cases, use_judge=True)
+        results = run_benchmark(cases, use_judge=use_judge, multi_turn=use_judge)
         print(f"OK ({len(results)} casos)")
     else:
         print_benchmark_banner(
-            title="RAGE+Judge Benchmark",
+            title="RAGE Benchmark",
             subtitle=f"{summary['total']} casos ({summary['attacks']} atk / {summary['benign']} benign)",
             judge_model=judge_model,
         )
@@ -825,7 +958,7 @@ def main() -> int:
             counter["n"] += 1
             print_single_case_live(r, case_index=counter["n"], case_total=total, delay_sec=args.live_delay)
 
-        results = run_benchmark(cases, use_judge=True, on_result=on_case)
+        results = run_benchmark(cases, use_judge=use_judge, multi_turn=use_judge, on_result=on_case)
     print()
 
     # Filter for display
@@ -844,7 +977,7 @@ def main() -> int:
 
     # Metrics
     metrics = compute_metrics(results)
-    _print_metrics(metrics, use_judge=True)
+    _print_metrics(metrics, use_judge=use_judge)
     if args.by_category:
         _print_category_metrics(compute_category_metrics(results))
 

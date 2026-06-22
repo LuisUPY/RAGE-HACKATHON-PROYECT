@@ -163,7 +163,7 @@ class DefensePipeline:
         apply_session_ratchet: bool = False,
     ) -> None:
         from rage_core.layers.layer1_rules import DeterministicPreFilter
-        from rage_core.layers.layer2_rag import ThreatKBRetriever
+        from rage_core.layers.layer2_rag import get_threat_kb_retriever
         from rage_core.layers.layer3_semantic import DynamicSemanticFilter
 
         # Instance-level overrides (fall back to class defaults if not provided)
@@ -183,16 +183,19 @@ class DefensePipeline:
         self.apply_session_ratchet = apply_session_ratchet
 
         self._l1 = DeterministicPreFilter()
-        self._l2 = ThreatKBRetriever()
+        self._l2 = get_threat_kb_retriever()
         self._l3 = DynamicSemanticFilter()
         self._l4 = DecisionEngine()
 
     def evaluate(self, text: str, state: ConversationState) -> TurnSignal:
+        from rage_core.layers.access_policy import is_rag_confirmed_from_l2
+
         t0 = time.perf_counter()
 
         l1_signal = self._l1.evaluate(text)
         l2_signal = self._l2.score(text)
-        l3_signal = self._l3.evaluate(text, state)
+        skip_judge = l1_signal.matched or is_rag_confirmed_from_l2(l2_signal)
+        l3_signal = self._l3.evaluate(text, state, skip_llm_judge=skip_judge)
 
         latency_ms = (time.perf_counter() - t0) * 1000.0
 

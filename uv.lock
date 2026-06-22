@@ -1375,6 +1375,7 @@ source = { editable = "." }
 dependencies = [
     { name = "matplotlib" },
     { name = "numpy" },
+    { name = "openai" },
     { name = "scikit-learn" },
     { name = "seaborn" },
 ]
@@ -1403,6 +1404,7 @@ dev = [
 requires-dist = [
     { name = "matplotlib", specifier = ">=3.8" },
     { name = "numpy", specifier = ">=1.26" },
+    { name = "openai", specifier = ">=1.30" },
     { name = "openai", marker = "extra == 'openai'", specifier = ">=1.30" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0" },
