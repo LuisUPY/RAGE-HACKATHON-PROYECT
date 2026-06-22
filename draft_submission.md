@@ -48,10 +48,10 @@ Organizations increasingly deploy conversational agents that translate natural l
 
 **Evaluation setup.**
 
-- **Unit tests:** 206 automated tests (gateway, layers, semantic filter, AUC).
-- **Generalization holdout:** 30 single-turn + 12 multi-turn scenarios (`eval_generalization`), texts not present in `threats.json`; calibrated for ~80% recall to expose realistic limits.
-- **Demo:** 33 scenarios (18 multi-turn + 15 single-turn probes) via `rage-demo` with optional LLM judge.
-- **Reproduce:** `uv sync` → `./scripts/run-bench-generalization.sh` (L1+L2, ~1 s) or `--full` (with judge).
+- **Automated regression:** 206 pytest tests (`./scripts/run-tests.sh`) verify code contracts (gateway, layers, AUC, datasets). Passing pytest ≠ 100% attack recall.
+- **Open-world security:** `./scripts/run-bench-generalization.sh` on 60-case holdout **outside the training KB**; CI enforces ~80% recall and 0% FP (`test_generalization_combined_recall_band`), not a curated 100%.
+- **Demo:** 33 scenarios via `rage-demo` with optional LLM judge.
+- **Reproduce:** `uv sync` → `./scripts/run-tests.sh -q` → `./scripts/run-bench-generalization.sh`
 
 **Design choices not fully successful.** Pure regex (L1-only) misses subtle social engineering (~20% FN). TF-IDF embeddings trade quality for zero-download deployment; sentence-transformers optional. Demo agent responses are simulated—the defense pipeline is real; end-to-end ASR against commercial LLMs is left for future work.
 

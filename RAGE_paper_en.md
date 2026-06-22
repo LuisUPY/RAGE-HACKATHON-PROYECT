@@ -9,7 +9,7 @@
 
 ## Abstract
 
-Text-to-SQL interfaces that connect language models to relational databases expose an attack surface where an adversary can gradually migrate a legitimate session toward destructive queries without triggering stateless filters. Russinovich et al. demonstrated that *Crescendo* achieves 98–100% success rates on aligned models using exclusively benign prompts distributed across N turns. We present **RAGE** (*Robust Agentic Security Gateway for Text-to-SQL*), a four-layer framework with a stateful semantic filter, EWMA decision engine with a consecutive-warn ratchet, and a hardened SQL gateway. We integrate the **Training-Center**, an interactive environment for simulation and hyperparameter calibration. We introduce the **AUC-D** (Area Under the Curve of Degradation) and **TRI** (Temporal Resistance Index) metrics. We validate the system with **108 automated tests** (100% passing) and the `SCENARIO_CRESCENDO` scenario, where RAGE blocks turns T4 and T5 through independent action across layers 3, 4, and the gateway.
+Text-to-SQL interfaces that connect language models to relational databases expose an attack surface where an adversary can gradually migrate a legitimate session toward destructive queries without triggering stateless filters. Russinovich et al. demonstrated that *Crescendo* achieves 98–100% success rates on aligned models using exclusively benign prompts distributed across N turns. We present **RAGE** (*Robust Agentic Security Gateway for Text-to-SQL*), a four-layer framework with a stateful semantic filter, EWMA decision engine with a consecutive-warn ratchet, and a hardened SQL gateway. We integrate the **Training-Center**, an interactive environment for simulation and hyperparameter calibration. We introduce the **AUC-D** (Area Under the Curve of Degradation) and **TRI** (Temporal Resistance Index) metrics. We validate with **206 automated regression tests** (`pytest`, code contracts) and an **out-of-KB generalization holdout** (**80.6% recall**, **0% FP**)—calibrated deliberately to avoid overfitting to prepared scenarios. On `SCENARIO_CRESCENDO`, RAGE blocks T4–T5 via layers 3, 4, and the gateway.
 
 ---
 
@@ -257,16 +257,36 @@ Complementarily, `uv run rage-redteam` runs an adaptive loop that iteratively at
 
 ## 5. Evaluation Framework and Quantitative Results
 
-### 5.1 Automated Test Suite
+### 5.1 Automated evaluation (two layers)
 
-The full suite (`python3 -m pytest tests/ -v`) reports **108 tests passing** (0 failures) across four modules:
+RAGE separates **code regression** from **open-world security evaluation**. We do not report “100% success” on attack detection.
+
+#### Layer A — Regression (`pytest`)
+
+`uv run pytest tests/ -v` runs **206 automated tests** (8 modules): SQL gateway, L1–L4 pipeline, cumulative drift, AUC-D/TRI, dataset integrity, demo smoke. CI fails if generalization holdout duplicates KB text (`test_generalization_no_kb_text_overlap`).
 
 | Module | Tests | Coverage |
 |--------|-------|----------|
-| `test_gateway.py` | 38 | SQL blocklist, UNION ALL regression, export, tool allowlist |
-| `test_layers.py` | 22 | L1 (8), L2 (5), pipeline E2E (5), ratchet/EWMA (6) |
-| `test_semantic_filter.py` | 14 | Sanitizer, cumulative drift (`TestCumulativeDrift`), escalation |
-| `test_auc_metric.py` | 30 | AUC, compromise, H1/H4 hypotheses, TRI |
+| `test_gateway.py` | 55 | SQL blocklist, UNION ALL regression, export |
+| `test_benchmark.py` | 45 | Datasets, holdout ~80% recall, multi-turn |
+| `test_layers.py` | 33 | L1–L4, E2E pipeline, ratchet/EWMA |
+| `test_semantic_filter.py` | 17 | Sanitizer, cumulative drift |
+| `test_auc_metric.py` | 17 | AUC-D, TRI, hypotheses H1/H4 |
+| `test_access_policy.py` | 10 | Multi-turn verdict |
+| `test_demo.py` | 6 | Demo orchestrator |
+| `test_ollama_client.py` | 23 | LLM/judge client |
+
+**Command:** `./scripts/run-tests.sh`
+
+#### Layer B — Holdout benchmark (real security metric)
+
+`./scripts/run-bench-generalization.sh` evaluates **60 cases** (texts not in `threats.json`). Test `test_generalization_combined_recall_band` requires recall **75–85%** (~80%) and **0 FP**—a pipeline overfit to prepared scenarios **fails CI**.
+
+| Holdout metric | Value |
+|----------------|-------|
+| Attack recall | 80.6% |
+| Precision | 100% |
+| Benign FP | 0% |
 
 ### 5.2 AUC-D and TRI Metrics (`auc_degradation.py`)
 

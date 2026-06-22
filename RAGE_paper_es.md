@@ -9,7 +9,7 @@
 
 ## Resumen
 
-Las interfaces Text-to-SQL que conectan modelos de lenguaje a bases de datos relacionales exponen una superficie de ataque donde el adversario puede migrar gradualmente una sesión legítima hacia consultas destructivas sin activar filtros stateless. Russinovich et al. demostraron que *Crescendo* alcanza tasas de éxito del 98–100% en modelos alineados mediante prompts exclusivamente benignos distribuidos en N turnos. Presentamos **RAGE** (*Robust Agentic Security Gateway for Text-to-SQL*), un framework de cuatro capas con filtro semántico stateful, motor de decisión EWMA con trinquete de advertencias y gateway SQL endurecido. Integramos el **Training-Center**, entorno interactivo de simulación y calibración de hiperparámetros. Introducimos las métricas **AUC-D** (Área Bajo la Curva de Degradación) y **TRI** (Temporal Resistance Index). Validamos el sistema con **108 pruebas automatizadas** (100% aprobadas) y el escenario `SCENARIO_CRESCENDO`, donde RAGE bloquea los turnos T4 y T5 mediante acción independiente de capas 3, 4 y gateway.
+Las interfaces Text-to-SQL que conectan modelos de lenguaje a bases de datos relacionales exponen una superficie de ataque donde el adversario puede migrar gradualmente una sesión legítima hacia consultas destructivas sin activar filtros stateless. Russinovich et al. demostraron que *Crescendo* alcanza tasas de éxito del 98–100% en modelos alineados mediante prompts exclusivamente benignos distribuidos en N turnos. Presentamos **RAGE** (*Robust Agentic Security Gateway for Text-to-SQL*), un framework de cuatro capas con filtro semántico stateful, motor de decisión EWMA con trinquete de advertencias y gateway SQL endurecido. Integramos el **Training-Center**, entorno interactivo de simulación y calibración de hiperparámetros. Introducimos las métricas **AUC-D** (Área Bajo la Curva de Degradación) y **TRI** (Temporal Resistance Index). Validamos con **206 pruebas de regresión automatizadas** (`pytest`, contratos de código) y un **holdout de generalización fuera de la KB** (**80,6% recall**, **0% FP**) — calibrado a propósito para no sobreajustar a escenarios preparados. En `SCENARIO_CRESCENDO`, RAGE bloquea T4–T5 mediante capas 3, 4 y gateway.
 
 ---
 
@@ -257,16 +257,36 @@ Complementariamente, `uv run rage-redteam` ejecuta un loop adaptativo que intent
 
 ## 5. Marco de Evaluación y Resultados Cuantitativos
 
-### 5.1 Suite de Pruebas Automatizadas
+### 5.1 Evaluación automatizada (dos capas)
 
-La suite completa (`python3 -m pytest tests/ -v`) reporta **108 pruebas aprobadas** (0 fallos) distribuidas en cuatro módulos:
+RAGE separa **regresión de código** y **evaluación de seguridad open-world**. No reportamos “100% de éxito” en detección de ataques.
+
+#### Capa A — Regresión (`pytest`)
+
+`uv run pytest tests/ -v` ejecuta **206 pruebas automatizadas** (8 módulos). Verifican contratos: gateway SQL, pipeline L1–L4, drift acumulado, AUC-D/TRI, integridad de datasets y smoke de demo. Un test de CI **falla si el holdout de generalización duplica textos de la KB** (`test_generalization_no_kb_text_overlap`).
 
 | Módulo | Pruebas | Cobertura |
 |--------|---------|-----------|
-| `test_gateway.py` | 38 | Blocklist SQL, regresión UNION ALL, export, allowlist de herramientas |
-| `test_layers.py` | 22 | L1 (8), L2 (5), pipeline E2E (5), ratchet/EWMA (6) |
-| `test_semantic_filter.py` | 14 | Sanitizer, deriva acumulada (`TestCumulativeDrift`), escalada |
-| `test_auc_metric.py` | 30 | AUC, compromiso, hipótesis H1/H4, TRI |
+| `test_gateway.py` | 55 | Blocklist SQL, regresión UNION ALL, export, allowlist |
+| `test_benchmark.py` | 45 | Datasets, holdout ~80% recall, multi-turn |
+| `test_layers.py` | 33 | L1–L4, pipeline E2E, ratchet/EWMA |
+| `test_semantic_filter.py` | 17 | Sanitizer, deriva acumulada, escalada |
+| `test_auc_metric.py` | 17 | AUC-D, TRI, hipótesis H1/H4 |
+| `test_access_policy.py` | 10 | Veredicto multi-turno |
+| `test_demo.py` | 6 | Orquestador demo |
+| `test_ollama_client.py` | 23 | Cliente LLM/juez |
+
+**Comando:** `./scripts/run-tests.sh`
+
+#### Capa B — Benchmark holdout (seguridad real)
+
+`./scripts/run-bench-generalization.sh` evalúa **60 casos** (textos no vistos en `threats.json`). El test `test_generalization_combined_recall_band` exige recall **75–85%** (≈80%) y **0 FP** — un pipeline sobreajustado a escenarios preparados **no pasa CI**.
+
+| Métrica holdout | Valor |
+|-----------------|-------|
+| Recall ataques | 80,6% |
+| Precision | 100% |
+| FP benignos | 0% |
 
 ### 5.2 Métricas AUC-D y TRI (`auc_degradation.py`)
 

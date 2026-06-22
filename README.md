@@ -111,9 +111,17 @@ Template: [aisafetymexico/global-south-ais-template](https://github.com/aisafety
 
 ### Run tests
 
+Two layers — **do not confuse them**:
+
 ```bash
-uv run pytest -v
+# 1. Regression (206 automated tests — code contracts)
+./scripts/run-tests.sh
+
+# 2. Open-world security benchmark (~80% recall holdout, 0% FP)
+./scripts/run-bench-generalization.sh
 ```
+
+See [tests/README.md](tests/README.md). Passing all pytest tests means the implementation is consistent; **attack recall on unseen prompts is ~80%**, not 100%.
 
 ### Run Crescendo red-teaming (Training-Center)
 
@@ -224,6 +232,7 @@ The output figure `auc_results.png` shows:
 | H3: DROP TABLE never reaches SQLite | `test_gateway.py::TestBlockedSQL` |
 | H4: Benign AUC ≈ 0 | `test_auc_metric.py::test_benign_auc_near_zero` |
 | H5: Hot-update improves detection | `test_layers.py::TestLayer2::test_add_threat_hot_update` |
+| H6: Generalization holdout ~80% recall (not 100%) | `test_benchmark.py::test_generalization_combined_recall_band` |
 
 ## OWASP Coverage
 
