@@ -19,6 +19,8 @@ Usage:
     uv run rage-bench --multi-turn --verbose
     uv run rage-bench --holdout --eval-set practice      # dataset de práctica (solo casos nuevos)
     uv run rage-bench --multi-turn --eval-set practice   # escenarios de práctica multi-turno
+    uv run rage-bench --holdout --eval-set open_v3       # benchmark abierto v3 (parafraseos)
+    uv run rage-bench --multi-turn --eval-set open_v3    # multi-turno open v3
 
 Exit code: 0 if accuracy >= 80% (closed KB). Holdout always exits 0 (métricas informativas).
 """
