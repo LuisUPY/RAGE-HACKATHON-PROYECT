@@ -33,9 +33,11 @@ _HOLDOUT_SCENARIOS_COMPARISON_PATH = (
 )
 _EVAL_PRACTICE_DIR = Path(__file__).parent.parent / "kb" / "eval_practice"
 _EVAL_OPEN_V3_DIR = Path(__file__).parent.parent / "kb" / "eval_open_v3"
+_EVAL_SIMILAR_DIR = Path(__file__).parent.parent / "kb" / "eval_similar"
 REGISTERED_EVAL_SETS: dict[str, Path] = {
     "practice": _EVAL_PRACTICE_DIR,
     "open_v3": _EVAL_OPEN_V3_DIR,
+    "similar": _EVAL_SIMILAR_DIR,
 }
 
 
