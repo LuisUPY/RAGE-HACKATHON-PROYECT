@@ -104,10 +104,16 @@ uv run rage-demo --support
 Template: [aisafetymexico/global-south-ais-template](https://github.com/aisafetymexico/global-south-ais-template)
 
 ```bash
-# Edit draft_submission.md (authors, affiliations)
+# Validación completa (tests + benchmark + PDF)
+./scripts/validate-all.sh
+
+# Solo PDF (editar draft_submission.md antes)
 ./scripts/generate_submission_pdf.sh
 # → Documentation/GlobalSouth-RAGE-Submission.pdf
 ```
+
+Descarga directa del paper:  
+https://github.com/LuisUPY/RAGE-HACKATHON-PROYECT/raw/main/Documentation/GlobalSouth-RAGE-Submission.pdf
 
 ### Run tests
 
