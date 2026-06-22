@@ -123,7 +123,9 @@ Flujo: campaña Crescendo → JSON de resultados → insights accionables → *h
 
 **Demo y Training-Center.** 33 escenarios (`rage-demo`, juez LLM opcional). Training-Center (`rage-training`) ejecuta campañas Crescendo defended vs baseline y propone parches a la KB.
 
-**Reproducir:** `uv sync` → `./scripts/validate-all.sh`
+**Reproducir:** `uv sync` → `./scripts/validate-all.sh` → `./scripts/run-ablation.sh`
+
+**Nota metodológica (honestidad).** El benchmark reporta **detección sobre texto etiquetado**, no ASR contra un LLM comercial. El ratchet EWMA está **desactivado** en `rage-bench` (`apply_session_ratchet=False`); el bloqueo usa `access_policy`, no solo la banda L4. La demo simula respuestas del agente — la defensa es real, la víctima no. El holdout fue calibrado a ~80% recall (CI exige 75–85%) para evitar sobreajuste; ver `Documentation/EVALUATION.md`.
 
 **Tabla 6 — Hipótesis verificadas en CI**
 
@@ -135,6 +137,15 @@ Flujo: campaña Crescendo → JSON de resultados → insights accionables → *h
 | H4 | AUC benigno ≈ 0 | `test_auc_metric.py` |
 | H5 | Hot-update KB mejora detección | `test_layers.py` |
 | H6 | Holdout ~80% recall (no 100%) | `test_benchmark.py` |
+
+**Tabla 7 — Ablación en holdout generalization (60 casos)**
+
+| Configuración | Recall | Precisión | FP | FN |
+|---------------|--------|-----------|----|----|
+| L1 solo (regex) | 77,8% | 100% | 0 | 8 |
+| L1+L2+política MT (default) | **80,6%** | 100% | 0 | 7 |
+
+L2 y contexto multi-turno aportan ~3 pp sobre regex puro; el juez LLM (`--full`) apunta a los 7 FN restantes.
 
 ## 4. Resultados
 
@@ -216,7 +227,7 @@ Override directo, jailbreak/DAN, inyección indirecta, *payload splitting*, Cres
 
 **Implicaciones.** RAGE demuestra que monitoreo *session-aware* es necesario para agentes Text-to-SQL con datos sensibles — relevante en LatAm donde copilotos internos proliferan más rápido que la madurez de seguridad.
 
-**Limitaciones.** (1) TF-IDF por defecto menos denso que *transformers*. (2) ~20% FN sin juez en holdout. (3) Dominio acotado a demo ventas/CRM. (4) Gateway regex vulnerable a ofuscaciones no listadas. (5) Conversaciones legítimas multi-tópico largas pueden elevar drift. (6) Demo usa respuestas simuladas del LLM — la defensa es real; ASR end-to-end con GPT-4 queda como trabajo futuro.
+**Limitaciones.** (1) TF-IDF por defecto menos denso que *transformers*. (2) ~20% FN sin juez en holdout. (3) **No medimos ASR end-to-end** contra GPT-4/Claude — agente simulado en demo. (4) Ratchet EWMA no participa en métricas de benchmark (solo demo/tests). (5) Holdout calibrado (~80%), no benchmark externo congelado tipo JailbreakBench. (6) Gateway regex vulnerable a ofuscaciones no listadas.
 
 **Doble uso (obligatorio).** Publicar umbrales Δ, EWMA y TRI permite optimizar trayectorias evasivas (*Crescendomation*). Training-Center puede usarse como banco adversarial offline. **Contramedidas:** calibración per-tenant, rate-limiting, gateway como última línea determinista, restringir Training-Center a CI aislado, no publicar umbrales de producción.
 

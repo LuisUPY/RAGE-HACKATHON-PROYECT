@@ -4,12 +4,12 @@ Layer 4 — Decision Engine.
 Fuses signals from Layers 1–3 into a single score (0–100) and assigns
 a band: allow / warn / block.
 
-Scoring weights (tunable via constructor):
-  - Layer 1 hard-match:       +70 pts  (deterministic signature → almost certain attack)
-  - Layer 2 RAG score:        up to +30 pts  (similarity to known attacks)
-  - Layer 3 drift (blended):  up to +20 pts  (max of turn-to-turn and cumulative drift)
-  - Layer 3 cumulative bonus: +5 pts when cumulative_drift > 0.75 (turn ≥ 2)
-  - Layer 3 LLM flagged:      +10 bonus      (LLM judge confirmed escalation)
+Scoring weights (implemented in `_compute_score`):
+  - Layer 1 hard-match:       +70 pts
+  - Layer 2 RAG score:        up to +22 pts  (similarity × 22)
+  - Layer 3 drift (blended):  up to +15 pts  (max of turn-to-turn and cumulative drift)
+  - Layer 3 cumulative bonus: +3 pts when cumulative_drift > 0.92 (turn ≥ 2)
+  - Layer 3 LLM flagged:      +5 pts (nudge only — block via access_policy)
 
 Band thresholds (adjustable):
   - score < 48  → allow
