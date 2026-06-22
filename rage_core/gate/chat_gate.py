@@ -1,6 +1,7 @@
 """Chat gate — RAGE detects, session judge adjudicates (multi-turn aware)."""
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 
 from rage_core.judge.session_judge import JudgeDecision, RageBriefing, SessionJudge
@@ -25,6 +26,8 @@ class GateResult:
     judge_used: bool
     judge_reason: str
     user_message: str
+    rage_ms: float = 0.0
+    judge_ms: float = 0.0
 
     @property
     def blocked(self) -> bool:
@@ -90,7 +93,9 @@ class ChatGate:
 
     def evaluate(self, user_text: str) -> GateResult:
         turn_idx = self.state.turn_index
+        rage_start = time.perf_counter()
         signal = self.pipeline.evaluate(user_text, self.state)
+        rage_ms = (time.perf_counter() - rage_start) * 1000.0
 
         policy_block = is_multiturn_attack_verdict(
             signal,
@@ -121,6 +126,8 @@ class ChatGate:
                 judge_used=False,
                 judge_reason="RAGE clear — no review needed",
                 user_message=user_text,
+                rage_ms=rage_ms,
+                judge_ms=0.0,
             )
 
         # L1 hard confirm without API — fast path
@@ -134,8 +141,11 @@ class ChatGate:
                 judge_used=False,
                 judge_reason=f"L1/L2 confirmed ({signal.layer1.pattern_id or signal.layer2.top_match_id})",
                 user_message=user_text,
+                rage_ms=rage_ms,
+                judge_ms=0.0,
             )
 
+        judge_start = time.perf_counter()
         decision, reason = self.judge.review(
             profile=self.profile,
             briefing=briefing,
@@ -143,6 +153,7 @@ class ChatGate:
             history=self._history,
             use_api=self.use_judge_api,
         )
+        judge_ms = (time.perf_counter() - judge_start) * 1000.0
 
         self._history.append({"role": "user", "content": user_text})
 
@@ -155,6 +166,8 @@ class ChatGate:
                 judge_used=True,
                 judge_reason=reason,
                 user_message=user_text,
+                rage_ms=rage_ms,
+                judge_ms=judge_ms,
             )
 
         action = "deny" if decision == JudgeDecision.DENY else "block"
@@ -166,6 +179,8 @@ class ChatGate:
             judge_used=True,
             judge_reason=reason,
             user_message=user_text,
+            rage_ms=rage_ms,
+            judge_ms=judge_ms,
         )
 
     def record_assistant(self, text: str) -> None:

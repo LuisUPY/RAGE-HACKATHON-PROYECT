@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import sys
 
+from rage_core.config.dual_api_setup import prompt_dual_api_setup
 from rage_core.config.env_loader import (
     bootstrap_nvidia_master_key,
     ensure_env_loaded,
@@ -34,6 +35,7 @@ def ensure_llm_ready(
     verify: bool = True,
     require_judge: bool = False,
     force_prompt: bool = False,
+    dual_api: bool = False,
 ) -> tuple[bool, str]:
     """Configure LLM backend from .env or interactive prompt.
 
@@ -44,7 +46,8 @@ def ensure_llm_ready(
     """
     ensure_env_loaded()
     if force_prompt and interactive and sys.stdin.isatty():
-        if not prompt_session_api_keys():
+        prompt_fn = prompt_dual_api_setup if dual_api else prompt_session_api_keys
+        if not prompt_fn(verify=verify):
             return False, "Se canceló: faltan API keys."
     elif _has_valid_key():
         os.environ.setdefault("RAGE_USE_LLM_JUDGE", "1")

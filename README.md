@@ -118,11 +118,12 @@ https://github.com/LuisUPY/RAGE-HACKATHON-PROYECT/raw/main/Documentation/GlobalS
 **Product foundation (adaptable company chatbots):**
 
 ```bash
-./scripts/run-profile-chat.sh --profile restaurant --offline   # sin API
-./scripts/run-profile-chat.sh --profile support                  # con juez + LLM
+./scripts/run-product-demo.sh                              # Track A — dual API + latencia
+./scripts/run-product-demo.sh --profile restaurant --offline
+./scripts/run-profile-chat.sh --profile support            # CLI anterior
 ```
 
-See [Documentation/PRODUCT_FOUNDATION.md](Documentation/PRODUCT_FOUNDATION.md).
+See [Documentation/PRODUCT_DEMO.md](Documentation/PRODUCT_DEMO.md) and [Documentation/PRODUCT_FOUNDATION.md](Documentation/PRODUCT_FOUNDATION.md).
 
 ### Run tests
 

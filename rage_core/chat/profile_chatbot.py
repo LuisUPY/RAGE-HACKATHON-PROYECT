@@ -1,6 +1,7 @@
 """Configurable company chatbot — profile + RAGE gate + optional LLM assistant."""
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 
 from rage_core.gate.chat_gate import ChatGate, GateResult
@@ -14,6 +15,19 @@ class ProfileChatResult:
     gate: GateResult
     assistant_text: str
     used_llm: bool = False
+    assistant_ms: float = 0.0
+
+    @property
+    def rage_ms(self) -> float:
+        return self.gate.rage_ms
+
+    @property
+    def judge_ms(self) -> float:
+        return self.gate.judge_ms
+
+    @property
+    def total_ms(self) -> float:
+        return self.rage_ms + self.judge_ms + self.assistant_ms
 
 
 @dataclass
@@ -34,7 +48,12 @@ class ProfileChatbot:
         if result.blocked:
             msg = result.block_message
             self.gate.record_assistant(msg)
-            return ProfileChatResult(user_text=user_text, gate=result, assistant_text=msg)
+            return ProfileChatResult(
+                user_text=user_text,
+                gate=result,
+                assistant_text=msg,
+                assistant_ms=0.0,
+            )
 
         client = None if offline else get_llm_client()
         if client is None:
@@ -45,19 +64,23 @@ class ProfileChatbot:
                 gate=result,
                 assistant_text=reply,
                 used_llm=False,
+                assistant_ms=0.0,
             )
 
+        assistant_ms = 0.0
         try:
             messages = [
                 {"role": "system", "content": self.profile.system_prompt},
                 *self.gate._history[-10:],  # noqa: SLF001 — includes current user turn
             ]
+            assistant_start = time.perf_counter()
             response = client.chat.completions.create(
                 model=self.model,
                 messages=messages,
                 temperature=0.3,
-                max_tokens=400,
+                max_tokens=256,
             )
+            assistant_ms = (time.perf_counter() - assistant_start) * 1000.0
             reply = (response.choices[0].message.content or "").strip()
         except Exception as exc:  # noqa: BLE001
             reply = format_llm_api_error(exc, model=self.model)
@@ -68,6 +91,7 @@ class ProfileChatbot:
             gate=result,
             assistant_text=reply,
             used_llm=True,
+            assistant_ms=assistant_ms,
         )
 
     def _offline_reply(self, user_text: str) -> str:
@@ -85,6 +109,8 @@ class ProfileChatbot:
             return "[Modo offline] Indica tu ticket INC-xxxx o describe el problema de CRM."
         if pid == "reports":
             return "[Modo offline] Puedes describir el reporte que quieres subir o resumir."
+        if pid == "practice":
+            return "[Modo offline] Describe tu ticket INC-xxxx o pregunta por el proceso de escalación."
         return f"[{self.profile.display_name}] ¿En qué puedo ayudarte?"
 
     def reset(self) -> None:

@@ -123,7 +123,7 @@ Para validar la hipótesis de venta B2B (restaurante, soporte, reportes), añadi
 2. **`ChatGate`**: RAGE evalúa el turno; si hay riesgo, el **juez de sesión** recibe el *briefing* de RAGE + historial multi-turno + perfil del bot.
 3. **Veredicto**: `ALLOW` (falsa alarma), `BLOCK` (solo este mensaje), `DENY` (ataque confirmado).
 
-CLI: `rage-chat-profile --profile restaurant|support|reports` (modo `--offline` para pruebas sin API).
+CLI: `rage-product-demo` configura APIs duales (asistente + juez), muestra latencia por turno y expone hipótesis en chat interactivo; `rage-chat-profile --profile restaurant|support|reports` sigue disponible (modo `--offline` para pruebas sin API).
 
 Esto no es producción multi-tenant; es **fundamento** para que cada cliente adapte contexto y el juez relacione el ataque con turnos anteriores.
 
