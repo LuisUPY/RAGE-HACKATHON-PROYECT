@@ -1,10 +1,12 @@
 # RAGE: Defensa Multi-Turno contra Prompt Injection en Agentes Text-to-SQL
 
-**Autores:** [Nombre Apellido]¹, [Nombre Apellido]² — *[Afiliación / Hub AI Safety México]*
+**Autores:** Luis Gerardo Escalante Velázquez¹, Armando Alberto Rivas Quevedo², Juan Emiliano Quintal Chuc³, Alette Guadalupe Martínez Juárez⁴
+
+¹²³⁴ *Equipo RAGE — Global South AI Safety Hackathon · Hub AI Safety México*
 
 **Rama:** AI Security · **Sub-rama:** Prompt injection & jailbreaks
 
-**Código y datos:** https://github.com/LuisUPY/RAGE-HACKATHON-PROYECT · Holdout: `rage_core/kb/eval_generalization/`
+**Código y datos:** https://github.com/LuisUPY/RAGE-HACKATHON-PROYECT · Holdout: `rage_core/kb/eval_generalization/` · PDF: `Documentation/GlobalSouth-RAGE-Submission.pdf`
 
 ## Resumen
 
@@ -266,6 +268,6 @@ La inyección multi-turno contra agentes con herramientas no se resuelve con fil
 
 **Declaración de uso de LLM:**
 
-LLMs (Cursor IDE, juez NVIDIA/OpenAI opcional) asistieron desarrollo, redacción y escenarios. Todas las cifras (recall, precisión, tests, tiempos) se verificaron con `pytest` y `./scripts/run-bench-generalization.sh`. Los autores asumen responsabilidad total de los resultados.
+LLMs (Cursor IDE, asistentes de redacción, juez NVIDIA/OpenAI opcional en demos) apoyaron desarrollo de código, documentación y escenarios de evaluación. Las cifras reportadas (recall 80,6%, precisión 100%, 232 tests, tiempos de benchmark) fueron verificadas por los autores con `pytest` y `./scripts/run-bench-generalization.sh`. Los cuatro integrantes del equipo revisaron y asumen responsabilidad total del contenido y los resultados.
 
 **Plantilla:** [aisafetymexico/global-south-ais-template](https://github.com/aisafetymexico/global-south-ais-template)

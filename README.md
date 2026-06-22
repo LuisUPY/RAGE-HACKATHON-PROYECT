@@ -101,7 +101,9 @@ uv run rage-demo --support
 ./scripts/run-bench-generalization.sh --full   # with LLM judge
 ```
 
-**Global South hackathon submission (PDF ≤ 8 pages):**
+**Global South hackathon submission (PDF ≤ 8 páginas):**
+
+Autores: Luis Gerardo Escalante Velázquez, Armando Alberto Rivas Quevedo, Juan Emiliano Quintal Chuc, Alette Guadalupe Martínez Juárez.
 
 Template: [aisafetymexico/global-south-ais-template](https://github.com/aisafetymexico/global-south-ais-template)
 
