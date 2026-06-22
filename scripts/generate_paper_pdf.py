@@ -192,6 +192,28 @@ def md_to_pdf(md_path: Path, pdf_path: Path) -> None:
             pdf.multi_cell(0, 6, "  • " + _strip_md_inline(line[2:]), new_x="LMARGIN", new_y="NEXT")
             continue
 
+        img_match = re.match(r"!\[([^\]]*)\]\(([^)]+)\)", line.strip())
+        if img_match:
+            caption, rel_path = img_match.group(1), img_match.group(2)
+            img_path = (md_path.parent / rel_path).resolve()
+            if not img_path.exists():
+                img_path = (REPO_ROOT / rel_path).resolve()
+            if img_path.exists():
+                pdf.ln(2)
+                usable_w = pdf.w - pdf.l_margin - pdf.r_margin
+                pdf.image(str(img_path), w=usable_w)
+                pdf.ln(2)
+                if caption:
+                    pdf.set_font("DejaVu", "", 8)
+                    pdf.set_text_color(80, 80, 80)
+                    pdf.multi_cell(0, 5, caption, align="C", new_x="LMARGIN", new_y="NEXT")
+                    pdf.set_text_color(0, 0, 0)
+                pdf.ln(2)
+            else:
+                pdf.set_font("DejaVu", "", 9)
+                pdf.multi_cell(0, 6, f"[Missing figure: {rel_path}]", new_x="LMARGIN", new_y="NEXT")
+            continue
+
         pdf.set_font("DejaVu", "", 10)
         pdf.multi_cell(0, 6, _strip_md_inline(line), new_x="LMARGIN", new_y="NEXT")
 

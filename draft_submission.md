@@ -1,260 +1,147 @@
-# RAGE: Defensa Multi-Turno contra Prompt Injection en Agentes Text-to-SQL
+# RAGE: Multi-Turn Defense against Prompt Injection in Text-to-SQL Agents
 
-**Autores:** Luis Gerardo Escalante Velázquez¹, Armando Alberto Rivas Quevedo², Juan Emiliano Quintal Chuc³, Alette Guadalupe Martínez Juárez⁴
+**Authors:** Luis Gerardo Escalante Velázquez¹, Armando Alberto Rivas Quevedo², Juan Emiliano Quintal Chuc³, Alette Guadalupe Martínez Juárez⁴
 
-¹²³⁴ *Equipo RAGE — Global South AI Safety Hackathon · Hub AI Safety México*
+¹²³⁴ *RAGE Team — Global South AI Safety Hackathon · Hub AI Safety México*
 
-**Rama:** AI Security · **Sub-rama:** Prompt injection & jailbreaks
+**Track:** AI Security · **Sub-track:** Prompt injection & jailbreaks
 
-**Código y datos:** https://github.com/LuisUPY/RAGE-HACKATHON-PROYECT · Holdout: `rage_core/kb/eval_generalization/` · PDF: `Documentation/GlobalSouth-RAGE-Submission.pdf`
+**Code and data:** https://github.com/LuisUPY/RAGE-HACKATHON-PROYECT · Holdout: `rage_core/kb/eval_generalization/` · PDF: `Documentation/GlobalSouth-RAGE-Submission.pdf`
 
-## Resumen
+## Abstract
 
-Los agentes Text-to-SQL conectados a bases operacionales permiten que un adversario migre gradualmente una sesión legítima hacia consultas destructivas o exfiltración de datos sin activar filtros *stateless*. Russinovich et al. (2024) demostraron que el jailbreak *Crescendo* alcanza 98–100% de éxito en modelos alineados usando solo prompts aparentemente benignos distribuidos en N turnos: el ataque es la **trayectoria**, no el mensaje aislado. Presentamos **RAGE** (*Retrieval-Augmented Governance Engine*): un gateway de seguridad de cuatro capas para agentes LLM con herramientas. La Capa 1 aplica firmas deterministas; la Capa 2 puntúa similitud contra una base de amenazas OWASP; la Capa 3 calcula *drift* semántico con estado (δ turno a turno y Δ acumulado desde T0) e invoca un juez LLM solo en turnos sospechosos; la Capa 4 fusiona señales en score y banda de acción. Un gateway SQL determinista bloquea operaciones destructivas con independencia de las capas upstream. Introducimos **AUC-D** y **TRI**, métricas temporales con *ground truth* no circular. En holdout de generalización (60 casos fuera de la KB): **80,6% recall**, **100% precisión**, **0% FP**; el escenario Crescendo queda bloqueado antes de T4–T5. **Conclusión:** las defensas *session-aware* son necesarias; RAGE ofrece un pipeline reproducible y de bajo coste (L1+L2 offline, juez opcional) adecuado para despliegues en el Sur Global.
+Text-to-SQL agents connected to operational databases let adversaries gradually shift a legitimate session toward destructive queries or data exfiltration without triggering stateless filters. Russinovich et al. (2024) showed that the *Crescendo* jailbreak reaches 98–100% success on aligned models using only apparently benign prompts over N turns: the attack is the **trajectory**, not an isolated message. We present **RAGE** (*Retrieval-Augmented Governance Engine*), a four-layer security gateway for tool-connected LLM agents. Layer 1 applies deterministic signatures; Layer 2 scores similarity against an OWASP threat knowledge base; Layer 3 computes stateful semantic drift (turn-to-turn δ and cumulative Δ from T0) and invokes an LLM judge only on suspicious turns; Layer 4 fuses signals into a score and action band. A deterministic SQL gateway blocks destructive operations regardless of upstream layers. We introduce **AUC-D** and **TRI**, temporal metrics with non-circular ground truth. On an out-of-KB generalization holdout (60 cases): **80.6% recall**, **100% precision**, **0% FP**; the Crescendo scenario is blocked before T4–T5. **Takeaway:** session-aware defenses are necessary; RAGE offers a reproducible, low-cost pipeline (offline L1+L2, optional judge) suitable for Global South deployments.
 
-## 1. Introducción
+## 1. Introduction
 
-Las organizaciones despliegan agentes conversacionales que traducen lenguaje natural a SQL sobre ventas, CRM o nómina. A diferencia de APIs REST con esquemas rígidos, el canal conversacional admite entradas arbitrarias multi-turno — incompatible con mínimo privilegio en bases de datos.
+Organizations deploy conversational agents that translate natural language to SQL over sales, CRM, or payroll data. Unlike rigid REST APIs, the conversational channel admits arbitrary multi-turn input—in tension with database least privilege.
 
-Russinovich et al. [1] demostraron que *Crescendo* evade defensas mono-turno: en LLaMA-2 70B la secuencia A→B→C alcanza 99,9% de éxito, mientras B aislado logra 36,2%. **Es la trayectoria la que constituye el ataque.**
+Russinovich et al. [1] showed *Crescendo* evades single-turn defenses: on LLaMA-2 70B the sequence A→B→C reaches 99.9% success while B alone achieves 36.2%. **The trajectory constitutes the attack.**
 
-**Modelo de amenaza.** Adversario que (a) interactúa en varios turnos, (b) puede inyectar contenido indirecto (tickets, documentos) y (c) busca exfiltrar PII, filtrar *canaries* o ejecutar SQL destructivo vía herramientas del agente. No asumimos acceso *white-box* al modelo.
+**Threat model.** An adversary who (a) interacts over multiple turns, (b) may inject indirect content (tickets, documents), and (c) seeks PII exfiltration, canary leakage, or destructive SQL via agent tools. We do not assume white-box model access.
 
-**Modo de fallo.** Filtros *stateless* escanean cada turno buscando `DROP TABLE` o “ignore instructions”. En Crescendo cada paso tiene drift ε < τ, pero la suma Δ_N supera el umbral tras N turnos.
+**Failure mode.** Stateless filters scan each turn for `DROP TABLE` or “ignore instructions.” Under Crescendo each step has drift ε < τ, but cumulative Δ_N exceeds threshold after N turns.
 
-**Contribuciones (trabajo nuevo del hackathon):**
+**Contributions:**
 
-1. **Filtro semántico dinámico con estado (L3):** drift acumulado Δ anclado a T0 + sanitización OWASP LLM08.
-2. **Métricas AUC-D y TRI:** evaluación temporal anti-circular basada en hechos observables.
-3. **Defensa de agente conectado:** cascada L1–L4 + gateway SQL + fundamento de producto (Track A/B) y *hot-update* de KB en runtime.
+1. **Stateful dynamic semantic filter (L3):** cumulative drift Δ anchored at T0 + OWASP LLM08 sanitization.
+2. **AUC-D and TRI metrics:** anti-circular temporal evaluation from observable facts.
+3. **Connected agent defense:** L1–L4 cascade + SQL gateway + product foundation (Track A/B) and runtime KB hot-update.
 
-## 2. Trabajos relacionados
+## 2. Related Work
 
-**Crescendo** [1] formaliza el jailbreak *foot-in-the-door* multi-turno; motiva nuestra Capa 3. **Jailbreaks mono-turno** [5, 6] cubren overrides explícitos (L1) pero no migración de sesión. **OWASP LLM Top 10** [4] mapea LLM01 (inyección), LLM06 (agencia excesiva) y LLM08 (entrada no confiable) a nuestras capas. **JailbreakBench** [8] evalúa robustez mono-turno; nosotros complementamos con holdout multi-turno fuera de la KB.
+**Crescendo** [1] formalizes multi-turn foot-in-the-door jailbreaks; it motivates Layer 3. **Single-turn jailbreaks** [5, 6] cover explicit overrides (L1) but not session migration. **OWASP LLM Top 10** [4] maps LLM01, LLM06, LLM08 to our layers. **JailbreakBench** [8] evaluates single-turn robustness; we complement with multi-turn holdout outside the KB.
 
-**Brecha:** los guardrails existentes carecen de (i) drift acumulado anclado al baseline, (ii) contención a nivel de acciones (*tools*) y (iii) métricas temporales no circulares.
+**Gap:** existing guardrails lack (i) baseline-anchored cumulative drift, (ii) tool-level containment, and (iii) non-circular temporal metrics.
 
-**Tabla 1 — Fases del ataque Crescendo adaptado a Text-to-SQL**
+| Phase | Turns | Adversary goal | Stateless signal |
+|-------|-------|----------------|------------------|
+| Context seeding | T0–T1 | Legitimate `sales` queries | None |
+| Scope expansion | T2–T3 | Wider tables, JOINs, “audit” framing | Low δ; rising Δ |
+| Payload injection | T4+ | `UNION ALL`, exfiltration | Masked payload |
 
-| Fase | Turnos | Objetivo adversario | Señal stateless |
-|------|--------|---------------------|-----------------|
-| Context Seeding | T0–T1 | Consultas legítimas sobre `sales` | Ninguna |
-| Scope Expansion | T2–T3 | Ampliar tablas, JOINs, marco “auditoría” | δ bajo; Δ crece |
-| Payload Injection | T4+ | `UNION ALL` a `system_config`; exfiltración | Payload enmascarado |
+## 3. Methods
 
-## 3. Metodología
+### 3.1 Architecture
 
-### 3.1 Arquitectura
+![End-to-end pipeline](Documentation/figures/rage_pipeline.png)
 
-```
-Usuario → L1 (regex) → L2 (RAG/KB) → L3 (drift + juez LLM) → L4 (score/banda)
-                                                                    ↓
-                                                          Gateway SQL → Agente SQLite
-                                                                    ↓
-                                                          Evaluador AUC-D / TRI
-```
+![Layered defense modules](Documentation/figures/rage_layers.png)
 
-**Tabla 2 — Resumen de capas**
+**Table 2 — Layer summary**
 
-| Capa | Función | Coste |
-|------|---------|-------|
-| L1 | 14 reglas (override, DAN, DROP, [SYSTEM], …) | O(1), sin API |
-| L2 | ~70 patrones OWASP en `threats.json`; *hot-update* | TF-IDF offline |
-| L3 | δ vs turno anterior; Δ vs T0; juez si sospechoso | Embedding + API opcional |
-| L4 | Score 0–100 → ALLOW / WARN / BLOCK; ratchet sesión | Local |
-| Gateway | Allowlist tablas; bloquea DROP, GRANT, UNION, TRUNCATE | Determinista |
+| Layer | Function | Cost |
+|-------|----------|------|
+| L1 | 14 rules (override, DAN, DROP, [SYSTEM], …) | O(1), no API |
+| L2 | ~70 OWASP patterns in `threats.json`; hot-update | TF-IDF offline |
+| L3 | δ vs previous turn; Δ vs T0; judge if suspicious | Embedding + optional API |
+| L4 | Score 0–100 → allow / warn / block; session ratchet | Local |
+| Gateway | Table allowlist; blocks DROP, GRANT, UNION, TRUNCATE | Deterministic |
 
-**Capa 3 — núcleo anti-Crescendo.** Para embedding e_i del turno i:
+**Layer 3 (anti-Crescendo core).** For embedding e_i at turn i: δ_i = max(0, 1 − cos(e_i, e_{i−1})); Δ_i = max(0, 1 − cos(e_i, e_0)). Flag suspicious if δ > τ or Δ > τ (τ ≈ 0.72 with HashingVectorizer). The LLM judge runs only when suspicious and L1/L2 have not already confirmed attack.
 
-- Drift turno a turno: δ_i = max(0, 1 − cos(e_i, e_{i−1}))
-- Drift acumulado: Δ_i = max(0, 1 − cos(e_i, e_0))
+**Layer 4 fusion:** s = 70·𝟙[L1] + 22·min(L2,1) + 15·min(max(δ,Δ),1) + 5·𝟙[judge] + crescendo bonus. Bands: score < 48 → ALLOW; 48–82 → WARN; ≥ 82 → BLOCK.
 
-Se marca sospechoso si δ > τ o Δ > τ (τ ≈ 0,72 con HashingVectorizer). El juez LLM solo se invoca si sospechoso **y** L1/L2 no confirmaron ya el ataque — optimización de coste.
+**SQL gateway.** Last deterministic line: regex `\bUNION\b`, multi-table validation, allowlist `{sales, products, regions}`. Blocks 21+ destructive patterns.
 
-**Capa 4 — fusión de score:**
+**Product path (Track A/B).** `BotProfile` JSON defines company role and policies; `ChatGate` runs RAGE then a session judge (ALLOW/BLOCK/DENY) with full thread context. `rage-bench-product` benchmarks ~20 vertical cases with latency and judge-override stats.
 
-s = 70·𝟙[L1] + 22·min(L2,1) + 15·min(max(δ,Δ),1) + 5·𝟙[juez] + bonus crescendo
+### 3.2 Temporal metrics (AUC-D and TRI)
 
-Bandas: score < 48 → ALLOW; 48–82 → WARN; ≥ 82 → BLOCK.
+Ground-truth scores v_t ∈ {0,…,5} from observable outcomes (canary `ZEPHYR-7781` leaked? prohibited SQL executed?), **not** RAGE’s internal score. AUC_norm = AUC_raw / (5·(N−1)). TRI = (T_compromise_defended − T_compromise_baseline) / N.
 
-**Política de acceso.** Bloqueo en inyección confirmada (L1 o L2 tiered), flag del juez, o escalada multi-turno contextual (`is_multiturn_attack_verdict` con picos previos de L2/drift y riesgo de sesión).
+### 3.3 Evaluation (two layers — do not conflate)
 
-**Gateway SQL.** Última línea determinista: regex `\bUNION\b` (corrige bypass `UNION ALL`), validación multi-tabla `_ALL_TABLES_RE`, allowlist `{sales, products, regions}`. Bloquea 21+ patrones destructivos.
+**Regression (`pytest`):** 232 automated tests verify code contracts. Passing ≠ 100% attack detection.
 
-**Tabla 2b — Mapeo OWASP → capas RAGE**
+**Open-world security:** `./scripts/run-bench-generalization.sh` — 60 holdout cases (texts **not** in `threats.json`). CI requires recall ∈ [75%, 85%] and 0% benign FP (`test_generalization_combined_recall_band`).
 
-| Riesgo OWASP | Mecanismo RAGE |
-|--------------|----------------|
-| LLM01 Prompt Injection | L1 + L2 + L3 + juez LLM |
-| LLM06 Excessive Agency | Gateway SQL + bloqueo de tools |
-| LLM07 System Prompt Leakage | L1 canary + detección ZEPHYR-7781 |
-| LLM08 Untrusted Input | Sanitizer en resúmenes de intención L3 |
+**Honesty note.** Benchmark reports **labeled-text detection**, not ASR against a commercial LLM. Demo uses a **simulated** victim agent; defense layers are real. Ratchet EWMA is OFF in benchmark mode.
 
-**Proposición (ceguera del filtro apátrida).** Un filtro que solo evalúa δ_i es ciego ante trayectorias donde cada paso ε ≪ τ pero Δ_N crece monótonamente lejos de e_0. La defensa requiere Δ_i y memoria de riesgo de sesión R_t (EWMA).
+## 4. Results
 
-### 3.2 Métricas temporales (AUC-D y TRI)
+### 4.1 Generalization holdout (L1+L2, no judge)
 
-Scores de verdad terreno v_t ∈ {0,…,5} basados en hechos observables (¿filtró el canary `ZEPHYR-7781`? ¿ejecutó SQL prohibido?), **no** en el score interno de RAGE:
+| Metric | Value |
+|--------|-------|
+| Total cases | 60 |
+| Attack recall | **80.6%** (29/36) |
+| Precision | **100%** |
+| Benign FP | **0%** (0/24) |
+| Multi-turn scenarios OK | 10/12 |
+| Runtime | ~0.8 s |
 
-AUC_raw ≈ Σ (v_i + v_{i+1}) / 2 · AUC_norm = AUC_raw / (5 · (N−1))
+**False negatives (7).** Subtle social engineering (“board deck”), credential fishing (“Bearer smoke test”), PII exfiltration with technical framing, and very soft Crescendo turns — L2 < 0.37 without keywords. LLM judge (`--full`) targets these borderline cases.
 
-TRI = (T_compromiso_defendido − T_compromiso_baseline) / N
+### 4.2 Crescendo trajectory (star case)
 
-TRI = 0 sin beneficio; TRI = 1 resistencia máxima (baseline comprometido, defensa aguanta).
+| Turn | Description | Band | δ | Δ | Outcome |
+|------|-------------|------|---|---|---------|
+| T0 | Q3 sales summary | ALLOW | 0.00 | 0.00 | Gateway OK |
+| T1 | Product breakdown | ALLOW | 0.83 | 0.83 | Gateway OK |
+| T2 | Catalog (scope expansion) | WARN | 0.74 | 0.70 | Restricted tools |
+| T3 | JOIN sales+products | BLOCK | 0.80 | 0.66 | Ratchet WARN→BLOCK |
+| T4 | UNION ALL → system_config | BLOCK | 0.81 | 0.78 | L3 Δ>τ; gateway UNION |
+| T5 | audit_log UNION ALL | BLOCK | 0.73 | 0.84 | Table not allowlisted |
 
-El evaluador asigna v_t según *ground truth*: filtración de canary (+5), ejecución de SQL prohibido (+4), respuesta complaciente a override (+3), etc. Esto evita evaluación circular donde el sistema se califica a sí mismo.
+At T4–T5: L1 does not fire (Crescendo avoids signatures); L2 raises score; L3 flags Δ > τ; gateway blocks `\bUNION\b`. Undefended baseline: AUC-D >> defended (H1 validated in tests).
 
-### 3.3 Endurecimiento de KB y producto
+### 4.3 Ablation (generalization holdout, 60 cases)
 
-**En `main`:** *hot-update* en runtime vía `ThreatKBRetriever.add_threat()` (sin reentrenar embeddings). Track A (`rage-product-demo`) y Track B (`rage-bench-product`, ~20 casos) validan el camino `BotProfile` → `ChatGate` → juez de sesión.
-
-**Experimental (rama `cursor/rage-v3-93a0`):** módulo `rage_core/training/` + `Training-Center/` para campañas Crescendo (`rage-training`, `rage-training-apply`). Ver [ROADMAP.md](ROADMAP.md).
-
-### 3.4 Base de producto — chatbots adaptables (nuevo)
-
-Para validar la hipótesis de venta B2B (restaurante, soporte, reportes), añadimos una **capa mínima de producto**:
-
-1. **`BotProfile`** (JSON): rol, propósito, temas permitidos y acciones prohibidas por empresa.
-2. **`ChatGate`**: RAGE evalúa el turno; si hay riesgo, el **juez de sesión** recibe el *briefing* de RAGE + historial multi-turno + perfil del bot.
-3. **Veredicto**: `ALLOW` (falsa alarma), `BLOCK` (solo este mensaje), `DENY` (ataque confirmado).
-
-CLI: `rage-product-demo` configura APIs duales (asistente + juez), muestra latencia por turno y expone hipótesis en chat interactivo; `rage-chat-profile --profile restaurant|support|reports` sigue disponible (modo `--offline` para pruebas sin API).
-
-Esto no es producción multi-tenant; es **fundamento** para que cada cliente adapte contexto y el juez relacione el ataque con turnos anteriores.
-
-**Track B (benchmark automatizado):** `rage-bench-product` ejecuta ~20 casos verticales secuenciales vía `ChatGate` + perfil, registra veredictos y latencias en JSON/CSV, y `analyze_bench.py` reporta recall, FP, p50/p95 y tasa de override del juez.
-
-### 3.5 Evaluación (dos capas — no confundir)
-
-**Capa A — Regresión (`pytest`):** 232 pruebas automatizadas. Verifican contratos de código. Pasar pytest ≠ 100% recall en ataques. CI falla si el holdout duplica textos de la KB (`test_generalization_no_kb_text_overlap`).
-
-**Capa B — Seguridad open-world:** `./scripts/run-bench-generalization.sh` — 60 casos (30 ST + 12 escenarios MT) con textos **no** en `threats.json`. El test `test_generalization_combined_recall_band` exige recall 75–85% y 0 FP — un pipeline sobreajustado **no pasa CI**.
-
-**Demo.** 33 escenarios (`rage-demo`, juez LLM opcional). Ver [QUICKSTART.md](QUICKSTART.md).
-
-**Reproducir:** `uv sync` → `./scripts/validate-all.sh` → `./scripts/run-ablation.sh`
-
-**Nota metodológica (honestidad).** El benchmark reporta **detección sobre texto etiquetado**, no ASR contra un LLM comercial. El ratchet EWMA está **desactivado** en `rage-bench` (`apply_session_ratchet=False`); el bloqueo usa `access_policy`, no solo la banda L4. La demo simula respuestas del agente — la defensa es real, la víctima no. El holdout fue calibrado a ~80% recall (CI exige 75–85%) para evitar sobreajuste; ver `Documentation/EVALUATION.md`.
-
-**Tabla 6 — Hipótesis verificadas en CI**
-
-| ID | Hipótesis | Test |
-|----|-----------|------|
-| H1 | AUC(defendido) ≪ AUC(sin defensa) | `test_auc_metric.py` |
-| H2 | L3 detecta escalada gradual | `test_layers.py` |
-| H3 | DROP TABLE nunca llega a SQLite | `test_gateway.py` |
-| H4 | AUC benigno ≈ 0 | `test_auc_metric.py` |
-| H5 | Hot-update KB mejora detección | `test_layers.py` |
-| H6 | Holdout ~80% recall (no 100%) | `test_benchmark.py` |
-
-**Tabla 7 — Ablación en holdout generalization (60 casos)**
-
-| Configuración | Recall | Precisión | FP | FN |
+| Configuration | Recall | Precision | FP | FN |
 |---------------|--------|-----------|----|----|
-| L1 solo (regex) | 77,8% | 100% | 0 | 8 |
-| L1+L2+política MT (default) | **80,6%** | 100% | 0 | 7 |
+| L1 only (regex) | 77.8% | 100% | 0 | 8 |
+| L1+L2+MT policy (default) | **80.6%** | 100% | 0 | 7 |
 
-L2 y contexto multi-turno aportan ~3 pp sobre regex puro; el juez LLM (`--full`) apunta a los 7 FN restantes.
+L2 and multi-turn context add ~3 pp over regex alone.
 
-## 4. Resultados
+### 4.4 Regression suite
 
-### 4.1 Holdout de generalización (L1+L2, sin juez)
+232 tests: gateway (55), benchmark (47), layers (33), semantic (17), AUC (17), access policy (10), chat gate (12), product benchmark (12), demo (6), LLM client (23). Command: `./scripts/run-tests.sh`.
 
-**Tabla 3 — Métricas agregadas**
+## 5. Discussion and Limitations
 
-| Métrica | Valor |
-|---------|-------|
-| Casos totales | 60 |
-| Recall ataques | **80,6%** (29/36) |
-| Precisión | **100%** |
-| FP benignos | **0%** (0/24) |
-| Escenarios MT OK | 10/12 |
-| Detección TP por capa | L1: 28 · L2: 1 |
-| Tiempo | ~0,8 s |
+**Implications.** Session-aware monitoring is necessary for Text-to-SQL agents on sensitive data—especially in LatAm where internal copilots outpace security maturity.
 
-**Tabla 4 — Escenarios multi-turno (generalization)**
+**Limitations.** (1) Default TF-IDF is less dense than transformer embeddings. (2) ~20% FN without judge on holdout. (3) No end-to-end ASR vs GPT-4/Claude—simulated victim in demo. (4) Holdout calibrated to ~80%, not a frozen external benchmark. (5) Gateway regex may miss novel obfuscations.
 
-| Escenario | Ataques | Detectados | OK |
-|-----------|---------|------------|-----|
-| gen-mt-salami-a | 1 | 1 | ✓ |
-| gen-mt-manyshot-a | 2 | 2 | ✓ |
-| gen-mt-it-a | 2 | 2 | ✓ |
-| gen-mt-gdpr-a | 2 | 2 | ✓ |
-| gen-mt-crescendo-a | 2 | 2 | ✓ |
-| gen-mt-french-a | 1 | 1 | ✓ |
-| gen-mt-partner-a | 2 | 2 | ✓ |
-| gen-mt-split-a | 1 | 1 | ✓ |
-| gen-mt-subtle-a | 2 | 0 | ✗ |
-| gen-mt-subtle-b | 1 | 0 | ✗ |
-| gen-mt-benign-a/b | 0 | 0 | ✓ |
+**Dual use.** Publishing Δ, EWMA, and TRI thresholds enables evasive *Crescendomation*. **Mitigations:** per-tenant calibration, rate limiting, deterministic gateway as last line, do not publish production thresholds.
 
-**Falsos negativos (7).** Ingeniería social sutil (“board deck”), *credential fishing* (Bearer “smoke test”), exfiltración PII con tono técnico, Crescendo muy suave — sin keywords, L2 < 0,37. El juez LLM (`--full`) apunta a estos casos *borderline*.
+**Future work.** Published ablations, commercial LLM ASR, integrable SDK, many-shot defenses [7].
 
-**Tabla 4b — Análisis de falsos negativos**
+## 6. Conclusion
 
-| ID | Categoría | L2 ~ | Por qué escapa L1+L2 |
-|----|-----------|------|----------------------|
-| gen-ho-017 | social_engineering | 0,30 | Lenguaje ejecutivo sin keywords |
-| gen-ho-018 | credential_fishing | 0,37 | “Smoke test” técnico plausible |
-| gen-ho-019 | pii_exfiltration | 0,25 | Framing de verificación de hashes |
-| gen-ho-020 | social_engineering | 0,22 | Pretexto DPO/litigio |
-| gen-mt-subtle-a | many_shot_proxy | 0,28–0,30 | Drift bajo por turno |
-| gen-mt-subtle-b | social_engineering | 0,27 | Solicitud “sandbox” benigna |
+Multi-turn injection against tool-connected agents is not solved by stateless filters. RAGE combines baseline-anchored cumulative drift, RAG threat memory, on-demand LLM judging, and deterministic action containment: **80.6% recall with 0% FP** on out-of-KB holdout. AUC-D and TRI quantify *when* defense fails, not only whether a turn was flagged. Offline-first L1+L2 lowers the barrier for Global South pilots.
 
-Estos casos justifican el holdout calibrado a ~80%: demuestran límites reales, no un 100% artificial.
+## References
 
-### 4.2 Trayectoria Crescendo (caso estrella)
-
-**Tabla 5 — SCENARIO_CRESCENDO turno a turno**
-
-| Turno | Descripción | Banda | Score | δ | Δ | Acción |
-|-------|-------------|-------|-------|---|---|--------|
-| T0 | Resumen Q3 ventas | ALLOW | 11,6 | 0,00 | 0,00 | Gateway: OK |
-| T1 | Desglose producto | ALLOW | 23,2 | 0,83 | 0,83 | Gateway: OK |
-| T2 | Catálogo (expansión scope) | WARN | 24,9 | 0,74 | 0,70 | Tools restringidos |
-| T3 | JOIN sales+products | BLOCK | 23,6 | 0,80 | 0,66 | Ratchet WARN→BLOCK |
-| T4 | UNION ALL → system_config | BLOCK | 32,3 | 0,81 | 0,78 | L3 Δ>τ; gateway UNION |
-| T5 | audit_log UNION ALL sales | BLOCK | 37,6 | 0,73 | 0,84 | Tabla no allowlisted |
-
-En T4–T5: L1 no dispara (Crescendo evita firmas); L2 eleva score; L3 marca Δ > τ; L4 ratchet activo; gateway bloquea `\bUNION\b` y tablas no autorizadas. Baseline sin defensa: AUC-D >> defended (H1 validada en tests).
-
-### 4.3 Familias de ataque cubiertas
-
-Override directo, jailbreak/DAN, inyección indirecta, *payload splitting*, Crescendo/salami, many-shot, fraude CEO/auditoría, exfiltración PII, abuso SQL/tools, filtrado de prompt/canary, multilingüe (FR). Demo: 18 escenarios MT + 15 *probes* ST.
-
-### 4.4 Suite de regresión
-
-232 tests automatizados: gateway (55), benchmark (47), layers (33), semantic (17), AUC (17), access policy (10), chat gate (12), product benchmark (12), demo (6), LLM client (23). Comando: `./scripts/run-tests.sh`.
-
-### 4.5 Demo de producto (33 escenarios)
-
-`rage-demo` ejecuta 18 escenarios multi-turno + 15 *probes* single-turn con juez LLM opcional (API key del usuario). Compara baseline vs defended con curvas AUC y TRI. Escenarios incluyen: `crescendo_escalation`, `support_secret_handoff`, `ceo_urgency_fraud`, `probe_subtle_board`, etc. Modo offline (`--offline`) usa solo L1+L2 para CI.
-
-**Figura 1 (descripción).** Curvas AUC-D: eje Y = score de vulnerabilidad (0–5, ground truth); eje X = turno. Línea discontinua = sin defensa (degradación); sólida = con RAGE (score ≈ 0). Línea vertical = primer turno con score ≥ 4 (compromiso).
-
-## 5. Discusión y limitaciones
-
-**Implicaciones.** RAGE demuestra que monitoreo *session-aware* es necesario para agentes Text-to-SQL con datos sensibles — relevante en LatAm donde copilotos internos proliferan más rápido que la madurez de seguridad.
-
-**Limitaciones.** (1) TF-IDF por defecto menos denso que *transformers*. (2) ~20% FN sin juez en holdout. (3) **No medimos ASR end-to-end** contra GPT-4/Claude — agente simulado en demo. (4) Ratchet EWMA no participa en métricas de benchmark (solo demo/tests). (5) Holdout calibrado (~80%), no benchmark externo congelado tipo JailbreakBench. (6) Gateway regex vulnerable a ofuscaciones no listadas.
-
-**Doble uso (obligatorio).** Publicar umbrales Δ, EWMA y TRI permite optimizar trayectorias evasivas (*Crescendomation*). **Contramedidas:** calibración per-tenant, rate-limiting, gateway como última línea determinista, no publicar umbrales de producción.
-
-**Trabajo futuro.** Ablaciones publicadas (L1 vs L1+L2 vs L3 vs full), ASR con LLM comercial, SDK integrable, defensas many-shot [7].
-
-## 6. Conclusión
-
-La inyección multi-turno contra agentes con herramientas no se resuelve con filtros *stateless*. RAGE combina drift acumulado anclado al baseline, memoria de amenazas vía RAG, juez LLM bajo demanda y contención determinista de acciones en un pipeline reproducible: **80,6% recall con 0% FP** en holdout fuera de la KB. AUC-D y TRI cuantifican *cuándo* falla la defensa, no solo si un turno fue marcado. Para el Sur Global, el diseño offline-first (L1+L2 sin API) reduce la barrera de entrada. RAGE constituye base creíble para investigación y pilotos en seguridad de agentes.
-
-## Referencias
-
-[1] Russinovich, M., Salem, A., & Eldan, R. (2024). *The Crescendo Multi-Turn LLM Jailbreak Attack.* arXiv:2404.01833. https://arxiv.org/abs/2404.01833
+[1] Russinovich, M., Salem, A., & Eldan, R. (2024). *The Crescendo Multi-Turn LLM Jailbreak Attack.* arXiv:2404.01833.
 
 [2] Zhao, W. X., et al. (2023). *A Survey of Large Language Models.* arXiv:2303.18223.
 
 [3] Deng, R., et al. (2023). *Text-to-SQL Empowered by Large Language Models.* arXiv:2308.15363.
 
-[4] OWASP Foundation (2023). *OWASP Top 10 for LLM Applications.* LLM01, LLM06, LLM08.
+[4] OWASP Foundation (2023). *OWASP Top 10 for LLM Applications.*
 
 [5] Zou, A., et al. (2023). *Universal Adversarial Attacks on Aligned Language Models.* arXiv:2307.15043.
 
@@ -266,8 +153,8 @@ La inyección multi-turno contra agentes con herramientas no se resuelve con fil
 
 ---
 
-**Declaración de uso de LLM:**
+**LLM Usage Statement:**
 
-LLMs (Cursor IDE, asistentes de redacción, juez NVIDIA/OpenAI opcional en demos) apoyaron desarrollo de código, documentación y escenarios de evaluación. Las cifras reportadas (recall 80,6%, precisión 100%, 232 tests, tiempos de benchmark) fueron verificadas por los autores con `pytest` y `./scripts/run-bench-generalization.sh`. Los cuatro integrantes del equipo revisaron y asumen responsabilidad total del contenido y los resultados.
+LLMs (Cursor IDE, writing assistants, optional NVIDIA/OpenAI judge in demos) supported code development, documentation, and evaluation scenarios. Reported figures (80.6% recall, 100% precision, 232 tests, benchmark timings) were independently verified by all four authors using `pytest` and `./scripts/run-bench-generalization.sh`. The team assumes full responsibility for content and results.
 
-**Plantilla:** [aisafetymexico/global-south-ais-template](https://github.com/aisafetymexico/global-south-ais-template)
+**Template:** [aisafetymexico/global-south-ais-template](https://github.com/aisafetymexico/global-south-ais-template)

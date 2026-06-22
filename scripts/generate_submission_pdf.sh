@@ -6,6 +6,8 @@ cd "$ROOT"
 uv sync --quiet
 uv pip install fpdf2 -q
 
+uv run python scripts/generate_submission_figures.py
+
 MD="${1:-draft_submission.md}"
 PDF="${2:-Documentation/GlobalSouth-RAGE-Submission.pdf}"
 
