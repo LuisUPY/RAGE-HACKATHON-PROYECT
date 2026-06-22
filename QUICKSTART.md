@@ -31,6 +31,8 @@ Ejecuta: setup check → 232 tests → benchmark producto → generalización �
 uv run pytest tests/ -q
 ```
 
+En Mac (y en general), usa **`uv run pytest`** en lugar del Python del sistema (`python3` / Homebrew 3.14): `uv` activa el `.venv` del proyecto con Python 3.12 y el paquete instalado.
+
 **Importante:** pasar pytest **no** significa 100% detección de ataques.
 
 ## 4. Benchmark de seguridad (métrica honesta)

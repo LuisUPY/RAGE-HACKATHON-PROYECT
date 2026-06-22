@@ -3,11 +3,14 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from pathlib import Path
 
 from rage_core.demo.attacks import ALL_SCENARIOS, SCENARIO_BENIGN, SCENARIO_DROP_TABLE
 from rage_core.demo.demo_scenarios import ALL_DEMO_SCENARIOS, CORE_DEMO_SCENARIOS
 from rage_core.demo.orchestrator import ScenarioOrchestrator
 from rage_core.metrics.auc_degradation import compute_auc
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 class TestScenarioOrchestrator:
@@ -46,7 +49,8 @@ class TestRageDemoCli:
             [sys.executable, "-m", "rage_core.demo.cli", "--list"],
             capture_output=True,
             text=True,
-            cwd="/workspace",
+            cwd=REPO_ROOT,
+            timeout=120,
         )
         assert proc.returncode == 0
         assert "drop_table_escalation" in proc.stdout
@@ -57,7 +61,7 @@ class TestRageDemoCli:
             [sys.executable, "-m", "rage_core.demo.cli", "--offline", "--core", "--no-plot"],
             capture_output=True,
             text=True,
-            cwd="/workspace",
+            cwd=REPO_ROOT,
             timeout=120,
         )
         assert proc.returncode == 0, proc.stderr
