@@ -13,7 +13,7 @@ RAGE is a Python 3.12 **command-line / research tool** (no web UI, no server). I
 - Run app (offline, no API key): `uv run rage-demo --offline --core --no-plot`
 - Run app with detail + AUC plot: `uv run rage-demo --offline --scenario drop_table_escalation --verbose` (writes `auc_results.png`)
 - Tests: `./scripts/run-tests.sh` (or `uv run pytest tests/ -q`) — 233 tests.
-- Security benchmark: `./scripts/run-bench-generalization.sh` — by design recall is ~80% (not 100%), so some attacks show as `FN`; that is expected, not a failure.
+- Security benchmark: `./scripts/run-bench-locked.sh` — frozen `eval_locked_v1`; metrics at runtime vs `benchmarks/baseline_locked_v1.json` (no calibrated recall band).
 - Lint: `uv run ruff check .` — NOTE: the repo currently has many pre-existing ruff violations; a non-zero exit here is the existing baseline, not something your change broke.
 
 ### Notes

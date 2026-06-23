@@ -21,8 +21,8 @@ Usage:
     uv run rage-bench --multi-turn --eval-set similar
     uv run rage-bench --holdout --eval-set generalization --batch
     uv run rage-bench --multi-turn --eval-set generalization --batch
-    uv run rage-bench --eval-set generalization --combined --batch --fast   # ~2s, sin juez
-    uv run rage-bench --eval-set generalization --combined --batch        # con juez (optimizado)
+    uv run rage-bench --eval-set locked_v1 --combined --batch --fast   # official frozen holdout
+    uv run rage-bench --eval-set generalization --combined --batch --fast   # legacy
 
 Exit code: 0 if accuracy >= 80% (closed KB). Holdout always exits 0 (métricas informativas).
 """
@@ -808,7 +808,7 @@ def main() -> int:
         "--eval-set",
         metavar="NAME",
         default=None,
-        help="Dataset alternativo: practice | open_v3 | similar | generalization (~80%% recall holdout)",
+        help="Dataset: locked_v1 (official) | practice | open_v3 | similar | generalization (legacy)",
     )
     parser.add_argument(
         "--fast",

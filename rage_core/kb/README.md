@@ -11,20 +11,20 @@ Hot-update at runtime: see [README.md](../../README.md#add-a-new-threat-at-runti
 
 ## Evaluation holdouts
 
-| Directory / file | Used by | Cite in paper? |
-|------------------|---------|----------------|
-| `eval_generalization/` | `run-bench-generalization.sh`, CI | **Yes** — primary ~80% recall holdout |
-| `eval_product/` | `run-bench-product.sh` (Track B) | Track B product benchmark |
-| `eval_practice/` | `build_eval_practice.py`, ablations | Secondary / internal |
-| `eval_similar/` | Similarity experiments | Secondary |
-| `eval_open_v3/` | Open-v3 benchmark build | Secondary |
-| `holdout.json`, `holdout_scenarios*.json` | Research comparisons | Optional |
+| Directory / file | Used by | Official metric? |
+|----------------|---------|------------------|
+| **`eval_locked_v1/`** | `run-bench-locked.sh`, CI snapshot | **Yes** — frozen holdout |
+| `eval_generalization/` | Legacy / ablation | No (calibrated ~80% history) |
+| `eval_product/` | `run-bench-product.sh` (Track B) | Track B only |
+| `eval_practice/`, `eval_similar/`, `eval_open_v3/` | Dev tuning (`pytest -m dev_eval`) | No |
+| `holdout.json`, `holdout_scenarios*.json` | Research comparisons | No |
 
-Each `eval_*/` folder typically contains `scenarios.json` (multi-turn) and `holdout.json` (single-turn cases). README.txt in each folder describes provenance.
+Each `eval_*/` folder typically contains `scenarios.json` and `holdout.json`. `eval_locked_v1/MANIFEST.json` records SHA256 for integrity.
 
 ## Rules
 
-- Holdout texts must **not** duplicate `threats.json` verbatim (enforced by `test_generalization_no_kb_text_overlap`).
-- Target recall on `eval_generalization` is **~80%**, not 100% (`test_generalization_combined_recall_band`).
+- Holdout texts must **not** duplicate `threats.json` verbatim (enforced in tests).
+- Do **not** tune L1/L2 against `eval_locked_v1` after freeze.
+- Official regression: `benchmarks/baseline_locked_v1.json`.
 
-See [Documentation/EVALUATION.md](../../Documentation/EVALUATION.md) before citing numbers.
+See [Documentation/EVALUATION.md](../../Documentation/EVALUATION.md).

@@ -57,7 +57,7 @@ Live demos (research, product chat, support, benchmarks) prompt for API keys at 
 ### Evaluation
 
 - **233 pytest tests** — code contracts (`./scripts/run-tests.sh`)
-- **~80% recall holdout** — honest security metric (`./scripts/run-bench-generalization.sh`)
+- **Frozen holdout** — `eval_locked_v1` + snapshot regression (`./scripts/run-bench-locked.sh`)
 
 Do not conflate them. See [tests/README.md](tests/README.md) and [Documentation/EVALUATION.md](Documentation/EVALUATION.md).
 
@@ -139,7 +139,7 @@ For automated Crescendo campaigns (`rage-training`), see [ROADMAP.md](ROADMAP.md
 | H3: DROP TABLE never reaches SQLite | `test_gateway.py::TestBlockedSQL` |
 | H4: Benign AUC ≈ 0 | `test_auc_metric.py::test_benign_auc_near_zero` |
 | H5: Hot-update improves detection | `test_layers.py::TestLayer2::test_add_threat_hot_update` |
-| H6: Generalization holdout ~80% recall | `test_benchmark.py::test_generalization_combined_recall_band` |
+| H6: Frozen holdout regression snapshot | `tests/test_benchmark_locked.py` |
 
 ## OWASP Coverage
 

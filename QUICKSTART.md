@@ -20,7 +20,7 @@ uv sync
 | Investigación / AUC / SQLite | `rage-demo` | `./scripts/run-demo.sh` |
 | Chat empresa + dual API | `rage-product-demo` | `./scripts/run-product-demo.sh` |
 | Soporte IT interactivo | `rage-chat-support` | `./scripts/run-support-chat.sh` |
-| Métrica seguridad (holdout) | — | `./scripts/run-bench-generalization.sh` |
+| Métrica seguridad (holdout congelado) | — | `./scripts/run-bench-locked.sh` |
 | Benchmark producto Track B | `rage-bench-product` | `./scripts/run-bench-product.sh` |
 
 Legacy (deprecated): `rage-chat-profile` / `run-profile-chat.sh` → usar `rage-product-demo`.
@@ -47,14 +47,16 @@ En Mac (y en general), usa **`uv run pytest`** en lugar del Python del sistema (
 
 **Importante:** pasar pytest **no** significa 100% detección de ataques.
 
-## 5. Benchmark de seguridad (métrica honesta)
+## 5. Benchmark de seguridad (holdout congelado `eval_locked_v1`)
 
 ```bash
-./scripts/run-bench-generalization.sh          # ~1s, offline
-./scripts/run-bench-generalization.sh --full   # con juez LLM (API key)
+./scripts/run-bench-locked.sh          # ~1s, L1+L2, sin API key
+./scripts/run-bench-locked.sh --full   # con juez LLM (API key)
 ```
 
-Recall objetivo **~80%** en holdout fuera de la KB; algunos `FN` son esperados.
+Métricas calculadas en runtime; regresión vía `benchmarks/baseline_locked_v1.json` (sin banda de recall objetivo en CI).
+
+Legacy (calibrado ~80%): `./scripts/run-bench-generalization.sh` redirige a locked.
 
 ## 6. Demo investigación (`rage-demo`)
 
@@ -134,5 +136,5 @@ El repo tiene violaciones de estilo preexistentes; el CI las reporta pero no blo
 ## Flujo mínimo diario
 
 ```bash
-git pull origin main && uv sync && ./scripts/run-tests.sh -q && ./scripts/run-bench-generalization.sh
+git pull origin main && uv sync && ./scripts/run-tests.sh -q && ./scripts/run-bench-locked.sh
 ```

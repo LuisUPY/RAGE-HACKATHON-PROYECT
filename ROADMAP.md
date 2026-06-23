@@ -8,7 +8,7 @@
 | `rage-demo` — escenarios multi-turno + AUC-D | ✅ |
 | Track A — `rage-product-demo` (perfiles + dual API) | ✅ |
 | Track B — `rage-bench-product` (~20 casos) | ✅ |
-| Holdout `eval_generalization` (~80% recall) | ✅ |
+| Holdout `eval_locked_v1` (frozen snapshot) | ✅ |
 | Hot-update de KB en runtime (`ThreatKBRetriever.add_threat`) | ✅ |
 | 233 tests + CI (regresión + generalización) | ✅ |
 | Submission Global South (PDF) | ✅ |
@@ -31,4 +31,4 @@ Para endurecer la KB **sin** Training-Center, usa la API de hot-update documenta
 
 1. Merge selectivo de Training-Center desde `cursor/rage-v3-93a0`.
 2. Job CI de `ruff` en verde (hoy baseline informativo).
-3. Benchmark producto en CI (`run-bench-product.sh --offline`).
+3. Importar benchmark externo (JailbreakBench subset) para `eval_locked_v2`.

@@ -13,7 +13,8 @@ Run all commands from the **repository root**.
 | `run-product-demo.sh` | Track A product chat (`rage-product-demo`) |
 | `run-support-chat.sh` | IT support interactive chat |
 | `run-profile-chat.sh` | **Deprecated** — use `run-product-demo.sh` |
-| `run-bench-generalization.sh` | Security holdout benchmark (~80% recall) |
+| `run-bench-locked.sh` | Official frozen security holdout (`eval_locked_v1`) |
+| `run-bench-generalization.sh` | **Deprecated** — redirects to `run-bench-locked.sh` |
 | `run-bench-product.sh` | Track B product benchmark |
 | `run-bench-live.sh` | Live benchmark with LLM judge |
 | `run-bench-multi-live.sh` | Multi-turn live benchmark |
@@ -33,7 +34,9 @@ Only needed when changing holdout data or running research scripts:
 | `build_eval_open_v3.py` | Rebuild `kb/eval_open_v3/` |
 | `build_holdout_scenarios_extended.py` | Extended scenario holdout |
 | `build_holdout_scenarios_comparison.py` | Comparison holdout |
-| `calibrate_eval_generalization.py` | Calibrate generalization recall |
+| `freeze_locked_eval_v1.py` | One-time generator for `eval_locked_v1` |
+| `update_benchmark_baseline.py` | Run/compare/update `benchmarks/baseline_locked_v1.json` |
+| `calibrate_eval_generalization.py` | Legacy dev tool (`eval_generalization` only) |
 | `probe_generalization_phrasing.py` | Phrasing probes |
 | `run_ablation.py` / `run-ablation.sh` | Layer ablation |
 | `analyze_bench.py` | Analyze Track B JSON output |

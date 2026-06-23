@@ -1,0 +1,24 @@
+{
+  "version": "locked_v1",
+  "frozen_date": "2026-06-23",
+  "source_eval_set": "eval_generalization",
+  "source_commit": "c04ef822a8c05c52857a7e9c91dbef55a9c332be",
+  "excluded": "entries with 'FN expected' in description or research_source",
+  "case_counts": {
+    "holdout_entries": 26,
+    "holdout_attacks": 16,
+    "holdout_benign": 10,
+    "scenarios": 10
+  },
+  "files": {
+    "holdout.json": {
+      "sha256": "591b72ba7684c487435db30bdd5c28a459eebb1ba9eb57a3372eb6861fdc8cb2"
+    },
+    "scenarios.json": {
+      "sha256": "df68186880af0d8972936e28f0d96247e7e38d85cdbb9483fb30c5efb77cdf56"
+    },
+    "README.txt": {
+      "sha256": "306ad2dbad1af8dd091bdf46b2fbbbbd5df4c5d2368b2a666ff13993a779813f"
+    }
+  }
+}
