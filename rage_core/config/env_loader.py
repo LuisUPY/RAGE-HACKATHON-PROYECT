@@ -1,4 +1,4 @@
-"""Load .env from repo root and expand RAGE_NVIDIA_API_KEY into LLM/judge vars."""
+"""Load non-secret defaults from .env; API keys are session-only (interactive prompt)."""
 from __future__ import annotations
 
 import os
@@ -9,6 +9,16 @@ from rage_core.llm.openai_compat import sanitize_api_key
 _PLACEHOLDER_MARKERS = ("PEGAR_AQUI", "nvapi-...", "sk-...")
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
+# Never read API secrets from disk — keys come from interactive prompt or shell env (CI).
+_SECRET_ENV_KEYS = frozenset(
+    {
+        "RAGE_NVIDIA_API_KEY",
+        "RAGE_LLM_API_KEY",
+        "RAGE_JUDGE_API_KEY",
+        "OPENAI_API_KEY",
+    }
+)
+
 
 def _is_placeholder(value: str) -> bool:
     v = value.strip()
@@ -18,7 +28,11 @@ def _is_placeholder(value: str) -> bool:
 
 
 def load_env_file(path: Path | None = None) -> bool:
-    """Parse a simple KEY=VALUE .env file into os.environ. Returns True if loaded."""
+    """Parse KEY=VALUE lines from .env into os.environ (non-secret keys only).
+
+    API keys are intentionally skipped so they are never loaded from disk.
+    Returns True if the file was read.
+    """
     env_path = path or (_REPO_ROOT / ".env")
     if not env_path.is_file():
         return False
@@ -33,9 +47,11 @@ def load_env_file(path: Path | None = None) -> bool:
             continue
         key, _, value = line.partition("=")
         key = key.strip()
+        if key in _SECRET_ENV_KEYS:
+            continue
         value = value.strip().strip('"').strip("'")
         if key:
-            os.environ[key] = value
+            os.environ.setdefault(key, value)
     return True
 
 
@@ -59,20 +75,15 @@ def _clean_key(value: str | None) -> str:
     return sanitize_api_key(value)
 
 
+def clear_session_api_keys() -> None:
+    """Remove API secrets from the current process (does not touch .env)."""
+    for key in _SECRET_ENV_KEYS:
+        os.environ.pop(key, None)
+
+
 def prompt_session_api_keys() -> bool:
     """Ask for API keys interactively each session (not saved to disk). Returns True if configured."""
-    # Clear prior session / .env secrets so we always prompt fresh.
-    for key in (
-        "RAGE_NVIDIA_API_KEY",
-        "RAGE_LLM_API_KEY",
-        "RAGE_JUDGE_API_KEY",
-        "OPENAI_API_KEY",
-        "RAGE_LLM_BASE_URL",
-        "RAGE_JUDGE_BASE_URL",
-        "RAGE_LLM_MODEL",
-        "RAGE_JUDGE_MODEL",
-    ):
-        os.environ.pop(key, None)
+    clear_session_api_keys()
 
     print()
     print("=" * 62)
@@ -113,7 +124,7 @@ def prompt_session_api_keys() -> bool:
 
 
 def ensure_env_loaded() -> None:
-    """Load .env from repo root and apply NVIDIA master-key bootstrap."""
+    """Load non-secret defaults from .env and apply NVIDIA master-key bootstrap."""
     load_env_file()
     bootstrap_nvidia_master_key()
 
@@ -124,12 +135,11 @@ def env_configured() -> tuple[bool, str]:
     llm_key = os.environ.get("RAGE_LLM_API_KEY", "")
     openai_key = os.environ.get("OPENAI_API_KEY", "")
     if not _is_placeholder(llm_key):
-        return True, "NVIDIA NIM configurado (RAGE_NVIDIA_API_KEY / RAGE_LLM_API_KEY)"
+        return True, "NVIDIA NIM configurado (sesión actual)"
     if not _is_placeholder(openai_key):
-        return True, "OpenAI configurado (OPENAI_API_KEY)"
+        return True, "OpenAI configurado (sesión actual)"
     return False, (
-        "Falta la API key.\n"
-        "  1. ./scripts/setup-env.sh\n"
-        "  2. Edita .env y pega tu clave en RAGE_NVIDIA_API_KEY=...\n"
-        "  3. ./scripts/run-support-chat.sh"
+        "Falta la API key en esta sesión.\n"
+        "  Ejecuta un comando en vivo (p. ej. ./scripts/run-support-chat.sh)\n"
+        "  y pégala cuando el programa te la pida — no se guarda en disco."
     )

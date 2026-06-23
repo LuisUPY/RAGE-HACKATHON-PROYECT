@@ -1,4 +1,7 @@
-"""Probe generalization holdout against L1+L2 and optionally L1+L2+Judge."""
+"""Probe generalization holdout — LEGACY dev tool (eval_generalization only).
+
+Official metric: ./scripts/run-bench-locked.sh (eval_locked_v1).
+"""
 from __future__ import annotations
 
 import argparse

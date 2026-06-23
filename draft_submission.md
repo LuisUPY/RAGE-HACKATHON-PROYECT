@@ -6,11 +6,11 @@
 
 **Track:** AI Security · **Sub-track:** Prompt injection & jailbreaks
 
-**Code and data:** https://github.com/LuisUPY/RAGE-HACKATHON-PROYECT · Holdout: `rage_core/kb/eval_generalization/` · PDF: `Documentation/GlobalSouth-RAGE-Submission.pdf`
+**Code and data:** https://github.com/LuisUPY/RAGE-HACKATHON-PROYECT · Holdout: `rage_core/kb/eval_locked_v1/` · PDF: `Documentation/GlobalSouth-RAGE-Submission.pdf`
 
 ## Abstract
 
-Text-to-SQL agents connected to operational databases let adversaries gradually shift a legitimate session toward destructive queries or data exfiltration without triggering stateless filters. Russinovich et al. (2024) showed that the *Crescendo* jailbreak reaches 98–100% success on aligned models using only apparently benign prompts over N turns: the attack is the **trajectory**, not an isolated message. We present **RAGE** (*Retrieval-Augmented Governance Engine*), a four-layer security gateway for tool-connected LLM agents. Layer 1 applies deterministic signatures; Layer 2 scores similarity against an OWASP threat knowledge base; Layer 3 computes stateful semantic drift (turn-to-turn δ and cumulative Δ from T0) and invokes an LLM judge only on suspicious turns; Layer 4 fuses signals into a score and action band. A deterministic SQL gateway blocks destructive operations regardless of upstream layers. We introduce **AUC-D** and **TRI**, temporal metrics with non-circular ground truth. On an out-of-KB generalization holdout (60 cases): **80.6% recall**, **100% precision**, **0% FP**; the Crescendo scenario is blocked before T4–T5. **Takeaway:** session-aware defenses are necessary; RAGE offers a reproducible, low-cost pipeline (offline L1+L2, optional judge) suitable for Global South deployments.
+Text-to-SQL agents connected to operational databases let adversaries gradually shift a legitimate session toward destructive queries or data exfiltration without triggering stateless filters. Russinovich et al. (2024) showed that the *Crescendo* jailbreak reaches 98–100% success on aligned models using only apparently benign prompts over N turns: the attack is the **trajectory**, not an isolated message. We present **RAGE** (*Retrieval-Augmented Governance Engine*), a four-layer security gateway for tool-connected LLM agents. Layer 1 applies deterministic signatures; Layer 2 scores similarity against an OWASP threat knowledge base; Layer 3 computes stateful semantic drift (turn-to-turn δ and cumulative Δ from T0) and invokes an LLM judge only on suspicious turns; Layer 4 fuses signals into a score and action band. A deterministic SQL gateway blocks destructive operations regardless of upstream layers. We introduce **AUC-D** and **TRI**, temporal metrics with non-circular ground truth. On a **frozen** out-of-KB holdout (`eval_locked_v1`, 52 turns): **100% recall**, **100% precision**, **0% FP** (L1+L2, metrics at runtime); the Crescendo scenario is blocked before T4–T5. **Takeaway:** session-aware defenses are necessary; RAGE offers a reproducible, low-cost pipeline (offline L1+L2, optional judge) suitable for Global South deployments.
 
 ## 1. Introduction
 
@@ -74,28 +74,31 @@ Ground-truth scores v_t ∈ {0,…,5} from observable outcomes (canary `ZEPHYR-7
 
 ### 3.3 Evaluation (two layers — do not conflate)
 
-**Regression (`pytest`):** 232 automated tests verify code contracts. Passing ≠ 100% attack detection.
+**Regression (`pytest`):** 233 automated tests verify code contracts. Passing ≠ 100% attack detection.
 
-**Open-world security:** `./scripts/run-bench-generalization.sh` — 60 holdout cases (texts **not** in `threats.json`). CI requires recall ∈ [75%, 85%] and 0% benign FP (`test_generalization_combined_recall_band`).
+**Open-world security:** `./scripts/run-bench-locked.sh` — frozen holdout `eval_locked_v1` (52 combined turns, texts **not** in `threats.json`). Metrics computed at runtime; CI regression via `benchmarks/baseline_locked_v1.json` and `tests/test_benchmark_locked.py` (0 FP, snapshot tolerance — **no calibrated recall band**).
+
+Legacy `eval_generalization` (calibrated ~80.6% recall) remains for comparison only.
 
 **Honesty note.** Benchmark reports **labeled-text detection**, not ASR against a commercial LLM. Demo uses a **simulated** victim agent; defense layers are real. Ratchet EWMA is OFF in benchmark mode.
 
 ## 4. Results
 
-### 4.1 Generalization holdout (L1+L2, no judge)
+### 4.1 Frozen holdout `eval_locked_v1` (L1+L2, no judge)
 
-**Table 3 — Holdout metrics**
+**Table 3 — Locked holdout metrics (baseline at freeze)**
 
 | Metric | Value |
 |--------|-------|
-| Total cases | 60 |
-| Attack recall | **80.6%** (29/36) |
+| Total turns | 52 |
+| Attack recall | **100%** (29/29) |
 | Precision | **100%** |
-| Benign FP | **0%** (0/24) |
-| Multi-turn scenarios OK | 10/12 |
-| Runtime | ~0.8 s |
+| Benign FP | **0%** (0/23) |
+| Runtime | ~0.7 s |
 
-**False negatives (7).** Subtle social engineering (“board deck”), credential fishing (“Bearer smoke test”), PII exfiltration with technical framing, and very soft Crescendo turns — L2 < 0.37 without keywords. LLM judge (`--full`) targets these borderline cases.
+**Methodology.** Dataset frozen in `rage_core/kb/eval_locked_v1/` with `MANIFEST.json` SHA256 checks. Derived from legacy generalization holdout **without** prompts marked “FN expected” (no pre-planned misses). Thresholds were not tuned against this set after freeze; CI detects drift via snapshot, not a target recall band.
+
+**Limitation.** This is an **internal** frozen holdout, not an independent external benchmark (e.g. JailbreakBench). Recall on genuinely novel attacks in production may be lower.
 
 ### 4.2 Crescendo trajectory (star case)
 
@@ -112,26 +115,26 @@ Ground-truth scores v_t ∈ {0,…,5} from observable outcomes (canary `ZEPHYR-7
 
 At T4–T5: L1 does not fire (Crescendo avoids signatures); L2 raises score; L3 flags Δ > τ; gateway blocks `\bUNION\b`. Undefended baseline: AUC-D >> defended (H1 validated in tests).
 
-### 4.3 Ablation (generalization holdout, 60 cases)
+### 4.3 Ablation (legacy generalization, 60 cases — dev reference)
 
-**Table 5 — Layer ablation**
+**Table 5 — Layer ablation (eval_generalization legacy)**
 
 | Configuration | Recall | Precision | FP | FN |
 |---------------|--------|-----------|----|----|
 | L1 only (regex) | 77.8% | 100% | 0 | 8 |
-| L1+L2+MT policy (default) | **80.6%** | 100% | 0 | 7 |
+| L1+L2+MT policy (default) | 80.6% | 100% | 0 | 7 |
 
-L2 and multi-turn context add ~3 pp over regex alone.
+L2 and multi-turn context add ~3 pp over regex alone on the legacy calibrated set.
 
 ### 4.4 Regression suite
 
-232 tests: gateway (55), benchmark (47), layers (33), semantic (17), AUC (17), access policy (10), chat gate (12), product benchmark (12), demo (6), LLM client (23). Command: `./scripts/run-tests.sh`.
+233 tests: gateway (55), benchmark (47), layers (33), semantic (17), AUC (17), access policy (10), chat gate (12), product benchmark (12), demo (6), env_loader (1), LLM client (23). Command: `./scripts/run-tests.sh`.
 
 ## 5. Discussion and Limitations
 
 **Implications.** Session-aware monitoring is necessary for Text-to-SQL agents on sensitive data—especially in LatAm where internal copilots outpace security maturity.
 
-**Limitations.** (1) Default TF-IDF is less dense than transformer embeddings. (2) ~20% FN without judge on holdout. (3) No end-to-end ASR vs GPT-4/Claude—simulated victim in demo. (4) Holdout calibrated to ~80%, not a frozen external benchmark. (5) Gateway regex may miss novel obfuscations.
+**Limitations.** (1) Default TF-IDF is less dense than transformer embeddings. (2) Locked v1 is internal/frozen, not a third-party benchmark. (3) No end-to-end ASR vs GPT-4/Claude—simulated victim in demo. (4) Legacy generalization set was historically calibrated (~80% recall with planned FNs). (5) Gateway regex may miss novel obfuscations.
 
 **Dual use.** Publishing Δ, EWMA, and TRI thresholds enables evasive *Crescendomation*. **Mitigations:** per-tenant calibration, rate limiting, deterministic gateway as last line, do not publish production thresholds.
 
@@ -139,7 +142,7 @@ L2 and multi-turn context add ~3 pp over regex alone.
 
 ## 6. Conclusion
 
-Multi-turn injection against tool-connected agents is not solved by stateless filters. RAGE combines baseline-anchored cumulative drift, RAG threat memory, on-demand LLM judging, and deterministic action containment: **80.6% recall with 0% FP** on out-of-KB holdout. AUC-D and TRI quantify *when* defense fails, not only whether a turn was flagged. Offline-first L1+L2 lowers the barrier for Global South pilots.
+Multi-turn injection against tool-connected agents is not solved by stateless filters. RAGE combines baseline-anchored cumulative drift, RAG threat memory, on-demand LLM judging, and deterministic action containment: **100% recall with 0% FP** on frozen holdout `eval_locked_v1` (L1+L2, 52 turns). AUC-D and TRI quantify *when* defense fails, not only whether a turn was flagged. Offline-first L1+L2 lowers the barrier for Global South pilots.
 
 ## References
 
@@ -163,6 +166,6 @@ Multi-turn injection against tool-connected agents is not solved by stateless fi
 
 **LLM Usage Statement:**
 
-LLMs (Cursor IDE, writing assistants, optional NVIDIA/OpenAI judge in demos) supported code development, documentation, and evaluation scenarios. Reported figures (80.6% recall, 100% precision, 232 tests, benchmark timings) were independently verified by all four authors using `pytest` and `./scripts/run-bench-generalization.sh`. The team assumes full responsibility for content and results.
+LLMs (Cursor IDE, writing assistants, optional NVIDIA/OpenAI judge in demos) supported code development, documentation, and evaluation scenarios. Reported figures (locked_v1 baseline, 231+ regression tests, benchmark timings) were verified using `pytest` and `./scripts/run-bench-locked.sh`. The team assumes full responsibility for content and results.
 
 **Template:** [aisafetymexico/global-south-ais-template](https://github.com/aisafetymexico/global-south-ais-template)

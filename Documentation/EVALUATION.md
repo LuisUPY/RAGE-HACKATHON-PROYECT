@@ -2,49 +2,61 @@
 
 This document states **what the numbers actually measure**. Required reading for paper authors and reviewers.
 
-## Two different pipelines (do not merge them)
+## Three evaluation layers
+
+| Layer | What | CI |
+|-------|------|-----|
+| **Contract tests** (`pytest`) | Gateway, L1–L4, metrics math, dataset integrity | `./scripts/run-tests.sh` |
+| **Official security holdout** (`eval_locked_v1`) | Frozen labels; metrics computed at runtime; snapshot regression | `tests/test_benchmark_locked.py` + `./scripts/run-bench-locked.sh` |
+| **Dev / legacy sets** (`eval_practice`, `eval_generalization`, …) | Tuning and experiments — **not** the official cited metric | `pytest -m dev_eval` (excluded from default CI) |
+
+## Official metric: `eval_locked_v1`
+
+- **Dataset:** `rage_core/kb/eval_locked_v1/` — frozen JSON + `MANIFEST.json` (SHA256 integrity).
+- **Policy:** Do not edit cases after freeze; do not tune L1/L2 thresholds against this set.
+- **Mode (baseline):** L1+L2, no LLM judge (`--fast`), single + multi-turn combined (52 turns).
+- **Regression:** `benchmarks/baseline_locked_v1.json` — CI fails if metrics drift beyond tolerance without an explicit baseline update (`scripts/update_benchmark_baseline.py --write`).
+- **No target recall band** — the number is whatever the pipeline scores on the frozen set (baseline at freeze: **100% recall, 0 FP** on 52 cases after removing legacy “FN expected” prompts).
+
+Legacy `eval_generalization` (~80% calibrated recall) remains in the repo for history only.
+
+## Benchmark vs demo pipeline
 
 | Path | Ratchet | Block decision | LLM agent |
 |------|---------|----------------|-----------|
-| **Benchmark** (`rage-bench`, holdout) | OFF (`apply_session_ratchet=False`) | `access_policy` (`is_attack_verdict` / `is_multiturn_attack_verdict`) | None — text classifier only |
-| **Demo** (`rage-demo`) | ON (default) | Same `access_policy` + gateway on tools | **Simulated** responses (`_simulate_naive_response`) |
+| **Benchmark** (`rage-bench`) | OFF | `access_policy` | None — text classifier only |
+| **Demo** (`rage-demo`) | ON | `access_policy` + gateway | **Simulated** victim |
 
-**Implication:** Reported **80.6% recall** is **detection on labeled text**, not Attack Success Rate (ASR) against a live GPT-4/Claude agent.
+**Implication:** Holdout recall is **detection on labeled text**, not Attack Success Rate (ASR) against a live GPT-4/Claude agent.
 
-## What “80.6% recall” means
+## What pytest means (default CI)
 
-- Dataset: `eval_generalization` — 60 cases, texts **not copied** from `threats.json`.
-- Mode default: L1+L2, **no LLM judge** (`--fast`).
-- Verdict: injection policy, **not** L4 band alone.
-- CI test `test_generalization_combined_recall_band` requires recall ∈ [75%, 85%] — the holdout was **calibrated** to ~80% to show realistic limits (not a independent external benchmark).
+Regression tests for code contracts. **Passing ≠ 100% attack detection on unseen real-world prompts.**
 
-This is **intellectually honest** for a hackathon if disclosed. It is **not** equivalent to JailbreakBench or Crescendo paper ASR.
-
-## What pytest 232 tests mean
-
-Regression tests for code contracts (gateway blocks DROP, drift computed, Track A/B product path, etc.). **Passing ≠ 100% attack detection.**
+Includes `test_benchmark_locked.py`: 0 FP on benign + snapshot match to baseline.
 
 ## Paper claims vs code (known gaps)
 
-1. **Simulated agent** — Demo does not call a commercial LLM; defense layer is real, victim is not.
-2. **Ratchet table in paper** — Applies when `apply_session_ratchet=True` (demo/tests); **benchmark metrics do not use ratchet**.
-3. **L4 docstring weights** — Module header mentions +30/+20/+10; implementation uses +22/+15/+5 (see `DecisionEngine._compute_score`).
-4. **No published baselines** — No side-by-side vs LlamaGuard, Rebuff, or regex-only in automated reports (ablation script provided).
+1. **Simulated agent** in demo — defense is real; victim LLM is not.
+2. **Ratchet** applies in demo, not in benchmark metrics.
+3. **Locked v1** is an internal frozen holdout, not an external benchmark like JailbreakBench.
+4. **No published baselines** vs LlamaGuard / Rebuff in automated CI.
 
-## Recommended citations in the paper
+## Recommended citations
 
-- ✅ “80.6% recall on out-of-KB holdout (L1+L2, 0% FP)”
-- ✅ “232 automated regression tests”
+- ✅ “Frozen holdout `eval_locked_v1`: X% recall, 0% FP (L1+L2, commit …)” — use value from `baseline_locked_v1.json`
+- ✅ “231+ automated regression tests (contract + locked snapshot)”
 - ✅ “Crescendo scenario blocked at gateway + policy layer”
-- ❌ “100% success on 108 tests” (deprecated)
+- ❌ “Calibrated ~80% recall band in CI” (removed)
 - ❌ “End-to-end LLM ASR reduced to X%” (not measured)
-- ❌ “EWMA ratchet drives benchmark recall” (ratchet off in benchmark)
 
 ## Reproduce
 
 ```bash
 ./scripts/run-tests.sh -q
-./scripts/run-bench-generalization.sh
-./scripts/run-ablation.sh
+./scripts/run-bench-locked.sh
+uv run python scripts/update_benchmark_baseline.py --eval-set locked_v1 --combined --fast
 ./scripts/validate-all.sh
 ```
+
+Dev-only calibrated sets: `uv run pytest tests/ -m dev_eval`

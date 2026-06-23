@@ -9,5 +9,6 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
+echo "NOTE: run-profile-chat.sh is deprecated — use ./scripts/run-product-demo.sh" >&2
 uv sync --quiet
 exec uv run rage-chat-profile "$@"

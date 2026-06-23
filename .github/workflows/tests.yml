@@ -17,7 +17,7 @@ jobs:
       - run: uv sync
       - run: ./scripts/run-tests.sh -q
 
-  generalization-benchmark:
+  locked-benchmark:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,7 +25,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: uv sync
-      - run: ./scripts/run-bench-generalization.sh
+      - run: ./scripts/run-bench-locked.sh
 
   product-benchmark:
     runs-on: ubuntu-latest

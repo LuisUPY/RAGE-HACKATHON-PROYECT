@@ -34,17 +34,19 @@ def ensure_llm_ready(
     interactive: bool = True,
     verify: bool = True,
     require_judge: bool = False,
-    force_prompt: bool = False,
+    force_prompt: bool | None = None,
     dual_api: bool = False,
 ) -> tuple[bool, str]:
-    """Configure LLM backend from .env or interactive prompt.
+    """Configure LLM backend via interactive prompt or process environment.
 
-    When force_prompt=True (demo default), always asks for API keys on TTY
-    even if .env exists — keys are session-only, not saved to disk.
-
-    Returns (ok, message). Never raises.
+    On an interactive terminal, API keys are requested each run (session-only;
+    never read from .env). Pass force_prompt=False to reuse keys already in the
+    environment (tests, CI). Returns (ok, message). Never raises.
     """
     ensure_env_loaded()
+    if force_prompt is None:
+        force_prompt = interactive and sys.stdin.isatty()
+
     if force_prompt and interactive and sys.stdin.isatty():
         prompt_fn = prompt_dual_api_setup if dual_api else prompt_session_api_keys
         if not prompt_fn(verify=verify):
