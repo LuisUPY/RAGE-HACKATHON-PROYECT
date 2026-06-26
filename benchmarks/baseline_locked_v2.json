@@ -1,0 +1,22 @@
+{
+  "eval_set": "locked_v1",
+  "engine": "v2",
+  "mode": "RAGE v2 (L0-L4)",
+  "use_judge": false,
+  "combined": true,
+  "metrics": {
+    "recall": 1.0,
+    "precision": 1.0,
+    "accuracy": 1.0,
+    "fp": 0,
+    "fn": 0,
+    "tp": 29,
+    "tn": 23,
+    "total": 52
+  },
+  "tolerance": {
+    "recall_abs": 0.02,
+    "fp_max": 0
+  },
+  "frozen_from_manifest_sha256": "591b72ba7684c487435db30bdd5c28a459eebb1ba9eb57a3372eb6861fdc8cb2:df68186880af0d8972936e28f0d96247e7e38d85cdbb9483fb30c5efb77cdf56"
+}

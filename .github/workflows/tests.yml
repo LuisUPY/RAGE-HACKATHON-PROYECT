@@ -38,6 +38,17 @@ jobs:
       - run: chmod +x scripts/run-fp-suite.sh
       - run: ./scripts/run-fp-suite.sh
 
+  locked-benchmark-v2:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync
+      - run: chmod +x scripts/run-bench-locked.sh
+      - run: ./scripts/run-bench-locked.sh --v2
+
   product-benchmark:
     runs-on: ubuntu-latest
     steps:

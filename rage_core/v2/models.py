@@ -17,6 +17,8 @@ class L0Signal:
   hard_hit: bool = False
   rule_id: str | None = None
   family: str | None = None
+  medium_hit: bool = False
+  medium_rule_id: str | None = None
 
 
 @dataclass

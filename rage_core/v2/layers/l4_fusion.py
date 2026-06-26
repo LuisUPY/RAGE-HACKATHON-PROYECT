@@ -6,6 +6,7 @@ from rage_core.v2.layers.l3_hints import FamilyHints
 
 # Documented weights (match implementation)
 _W_L0 = 55
+_W_MEDIUM = 56
 _W_HINT_HIGH = 25
 _W_TRAJECTORY = 30
 _W_DRIFT = 15
@@ -23,6 +24,18 @@ def fuse(signals: LayerSignalsV2) -> FusionResult:
   if signals.l0.hard_hit:
     score += _W_L0
     reasons.append(f"L0:{signals.l0.rule_id}")
+  elif signals.l0.medium_hit:
+    score += _W_MEDIUM
+    reasons.append(f"M0:{signals.l0.medium_rule_id}")
+
+  # Multi-turn: medium lexicon + prior context elevates salami attacks
+  if (
+    signals.l0.medium_hit
+    and signals.turn_index >= 1
+    and signals.l2.trajectory_score >= 0.08
+  ):
+    score += 12
+    reasons.append("M0+trajectory")
 
   if FamilyHints.is_high_hint(signals.l3):
     score += _W_HINT_HIGH
@@ -57,6 +70,12 @@ def fuse(signals: LayerSignalsV2) -> FusionResult:
     raw = Verdict.ALERT
   else:
     raw = Verdict.CONTAIN
+
+  # Medium lexicon alone caps at ALERT (not CONTAIN) unless trajectory confirms
+  if raw == Verdict.CONTAIN and signals.l0.medium_hit and not signals.l0.hard_hit:
+    if not signals.l2.escalation_detected:
+      raw = Verdict.ALERT
+      reasons.append("medium_only_cap_alert")
 
   # L3 hint alone cannot CONTAIN
   if raw == Verdict.CONTAIN and not signals.l0.hard_hit and not signals.l2.escalation_detected:

@@ -37,7 +37,7 @@
   {
     "id": "H0-008",
     "family": "sql_destructive",
-    "pattern": "(?i)\\bDELETE\\s+FROM\\s+\\w+\\s*;?"
+    "pattern": "(?i)\\bDELETE\\s+FROM\\s+\\w+"
   },
   {
     "id": "H0-009",
@@ -98,5 +98,30 @@
     "id": "H0-020",
     "family": "exfil",
     "pattern": "(?i)list\\s+all\\s+reservation\\s+phone\\s+numbers"
+  },
+  {
+    "id": "H0-021",
+    "family": "sql_destructive",
+    "pattern": "(?i)\\bGRANT\\s+ALL\\s+ON\\b"
+  },
+  {
+    "id": "H0-022",
+    "family": "jailbreak",
+    "pattern": "(?i)guardrails?\\s+(are\\s+)?off"
+  },
+  {
+    "id": "H0-023",
+    "family": "jailbreak",
+    "pattern": "(?i)ignore\\s+safety\\s+checks?"
+  },
+  {
+    "id": "H0-024",
+    "family": "override_direct",
+    "pattern": "(?i)<<\\s*ADMIN\\s+OVERRIDE\\s*>>"
+  },
+  {
+    "id": "H0-025",
+    "family": "sql_destructive",
+    "pattern": "(?i)SELECT\\s+CASE\\s+WHEN.*\\bFROM\\b"
   }
 ]

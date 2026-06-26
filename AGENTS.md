@@ -15,6 +15,7 @@ RAGE is a Python 3.12 **command-line / research tool** (no web UI, no server). I
 - Tests: `./scripts/run-tests.sh` (or `uv run pytest tests/ -q`) — 233+ tests.
 - Security benchmark: `./scripts/run-bench-locked.sh` — frozen `eval_locked_v1`; metrics at runtime vs `benchmarks/baseline_locked_v1.json` (no calibrated recall band).
 - **v2 fp_suite:** `uv run pytest tests/fp_suite/ -q` — must stay 0 CONTAIN on benign corpus.
+- **v2 locked benchmark:** `./scripts/run-bench-locked.sh --v2` — vs `benchmarks/baseline_locked_v2.json`.
 - Lint: `uv run ruff check .` — NOTE: the repo currently has many pre-existing ruff violations; a non-zero exit here is the existing baseline, not something your change broke.
 
 ### Notes
