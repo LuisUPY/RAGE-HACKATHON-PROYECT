@@ -22,6 +22,7 @@ Usage:
     uv run rage-bench --holdout --eval-set generalization --batch
     uv run rage-bench --multi-turn --eval-set generalization --batch
     uv run rage-bench --eval-set locked_v1 --combined --batch --fast   # official frozen holdout
+    uv run rage-bench --eval-set locked_v1 --combined --batch --engine v2   # RAGE v2 pipeline
     uv run rage-bench --eval-set generalization --combined --batch --fast   # legacy
 
 Exit code: 0 if accuracy >= 80% (closed KB). Holdout always exits 0 (métricas informativas).
@@ -52,6 +53,12 @@ from rage_core.benchmark.evaluator import (
     compute_scenario_metrics,
     run_benchmark,
     run_multi_turn_benchmark,
+)
+from rage_core.benchmark.v2_evaluator import (
+    run_v2_benchmark,
+    run_v2_multi_turn_benchmark,
+    to_legacy_case_result,
+    v2_results_to_legacy_metrics,
 )
 from rage_core.benchmark.live import (
     print_benchmark_banner,
@@ -444,9 +451,19 @@ def _run_combined_eval(
     live_delay: float,
     live_pause: bool,
     use_judge: bool,
+    engine: str = "v1",
 ) -> int:
     """Single-turn + multi-turn eval set in one process (one API key prompt)."""
     import time
+
+    if engine == "v2":
+        return _run_combined_eval_v2(
+            eval_set,
+            verbose=verbose,
+            by_category=by_category,
+            filter_arg=filter_arg,
+            batch=batch,
+        )
 
     t0 = time.perf_counter()
     cases = load_eval_holdout_dataset(eval_set)
@@ -511,6 +528,75 @@ def _run_combined_eval(
     metrics = compute_metrics(results)
     _print_metrics(metrics, use_judge=use_judge)
     _print_scenario_summary(compute_scenario_metrics(scenarios, mt_results), scenarios)
+    _print_holdout_failures(results)
+    if by_category:
+        _print_category_metrics(compute_category_metrics(results))
+
+    print()
+    print(f"  Tiempo total: {elapsed:.1f}s  ({len(results)} evaluaciones)")
+    return 0
+
+
+def _run_combined_eval_v2(
+    eval_set: str,
+    *,
+    verbose: bool,
+    by_category: bool,
+    filter_arg: str | None,
+    batch: bool,
+) -> int:
+    """Combined eval using RAGE v2 pipeline (no LLM judge)."""
+    import time
+
+    t0 = time.perf_counter()
+    cases = load_eval_holdout_dataset(eval_set)
+    scenarios = load_eval_scenarios(eval_set)
+    case_summary = dataset_summary(cases)
+    scen_summary = scenario_summary(scenarios)
+    title = f"Evaluación COMBINADA v2 (eval-set={eval_set})"
+    mode_label = "RAGE v2 (L0–L4, ALERT+CONTAIN=attack)"
+
+    if batch:
+        print()
+        print("=" * (sum(_COL.values()) + len(_COL) * 3))
+        print(f"  RAGE — {title}")
+        print(
+            f"  Single: {case_summary['total']} casos  |  "
+            f"Multi: {scen_summary['scenarios']} escenarios / {scen_summary['turns']} turnos"
+        )
+        print(f"  Modo: {mode_label}")
+        print("=" * (sum(_COL.values()) + len(_COL) * 3))
+        print()
+        print("Evaluando...", end=" ", flush=True)
+
+    st_v2 = run_v2_benchmark(cases)
+    mt_v2 = run_v2_multi_turn_benchmark(scenarios)
+    results = [to_legacy_case_result(r) for r in st_v2 + mt_v2]
+
+    if batch:
+        print(f"OK ({len(results)} turnos)")
+
+    elapsed = time.perf_counter() - t0
+    print()
+
+    display = _filter_results(results, filter_arg)
+    if verbose:
+        display = results
+    elif filter_arg is None:
+        display = [r for r in results if not r.correct]
+
+    if display and batch:
+        _print_header()
+        for r in display:
+            _print_row(r)
+        if not verbose and filter_arg is None:
+            print()
+            print(f"  (mostrando {len(display)} errores — usa --verbose para ver todos)")
+
+    metrics = compute_metrics(results)
+    _print_metrics(metrics, use_judge=False)
+    mt_legacy = [to_legacy_case_result(r) for r in mt_v2]
+    _print_scenario_summary(compute_scenario_metrics(scenarios, mt_legacy), scenarios)
     _print_holdout_failures(results)
     if by_category:
         _print_category_metrics(compute_category_metrics(results))
@@ -821,6 +907,12 @@ def main() -> int:
         help="Single-turn + multi-turn en una ejecución (requiere --eval-set)",
     )
     parser.add_argument(
+        "--engine",
+        choices=("v1", "v2"),
+        default="v2",
+        help="Motor de defensa: v2 (default) o v1 (legacy L1–L4)",
+    )
+    parser.add_argument(
         "--filter",
         metavar="OUTCOME",
         choices=["tp", "tn", "fp", "fn", "TP", "TN", "FP", "FN"],
@@ -846,7 +938,7 @@ def main() -> int:
         if not args.eval_set:
             print("ERROR: --combined requiere --eval-set NAME", file=sys.stderr)
             return 1
-        if use_judge and _ensure_judge_ready() != 0:
+        if use_judge and args.engine == "v1" and _ensure_judge_ready() != 0:
             return 1
         return _run_combined_eval(
             args.eval_set,
@@ -857,6 +949,7 @@ def main() -> int:
             live_delay=args.live_delay,
             live_pause=args.live_pause,
             use_judge=use_judge,
+            engine=args.engine,
         )
 
     if use_judge and _ensure_judge_ready() != 0:

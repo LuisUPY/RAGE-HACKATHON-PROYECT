@@ -22,7 +22,7 @@ from rage_core.benchmark.product_evaluator import (
 
 def _load_results(path: Path) -> tuple[dict, list[ProductCaseResult]]:
     data = json.loads(path.read_text(encoding="utf-8"))
-    results = [ProductCaseResult(**row) for row in data.get("cases", [])]
+    results = [ProductCaseResult.from_dict(row) for row in data.get("cases", [])]
     return data, results
 
 

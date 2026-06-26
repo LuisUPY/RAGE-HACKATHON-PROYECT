@@ -15,11 +15,17 @@ sys.path.insert(0, str(ROOT))
 
 from rage_core.benchmark.dataset import load_eval_holdout_dataset, load_eval_scenarios
 from rage_core.benchmark.evaluator import compute_metrics, run_benchmark, run_multi_turn_benchmark
+from rage_core.benchmark.v2_evaluator import (
+    run_v2_benchmark,
+    run_v2_multi_turn_benchmark,
+    v2_results_to_legacy_metrics,
+)
 
-DEFAULT_BASELINE = ROOT / "benchmarks" / "baseline_locked_v1.json"
+DEFAULT_BASELINE_V1 = ROOT / "benchmarks" / "baseline_locked_v1.json"
+DEFAULT_BASELINE_V2 = ROOT / "benchmarks" / "baseline_locked_v2.json"
 
 
-def _run_locked(*, eval_set: str, combined: bool, use_judge: bool) -> dict:
+def _run_locked_v1(*, eval_set: str, combined: bool, use_judge: bool) -> dict:
     if not combined:
         cases = load_eval_holdout_dataset(eval_set)
         results = run_benchmark(cases, use_judge=use_judge, multi_turn=False)
@@ -35,6 +41,26 @@ def _run_locked(*, eval_set: str, combined: bool, use_judge: bool) -> dict:
         )
         results = st + mt
     m = compute_metrics(results)
+    return {
+        "recall": round(m.recall, 6),
+        "precision": round(m.precision, 6),
+        "accuracy": round(m.accuracy, 6),
+        "fp": m.fp,
+        "fn": m.fn,
+        "tp": m.tp,
+        "tn": m.tn,
+        "total": m.total,
+    }
+
+
+def _run_locked_v2(*, eval_set: str, combined: bool) -> dict:
+    if not combined:
+        results = run_v2_benchmark(load_eval_holdout_dataset(eval_set))
+    else:
+        st = run_v2_benchmark(load_eval_holdout_dataset(eval_set))
+        mt = run_v2_multi_turn_benchmark(load_eval_scenarios(eval_set))
+        results = st + mt
+    m = v2_results_to_legacy_metrics(results)
     return {
         "recall": round(m.recall, 6),
         "precision": round(m.precision, 6),
@@ -84,19 +110,34 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Benchmark baseline for frozen eval sets")
     parser.add_argument("--eval-set", default="locked_v1")
     parser.add_argument("--combined", action="store_true", default=True)
-    parser.add_argument("--fast", action="store_true", help="L1+L2 only (no judge)")
+    parser.add_argument("--fast", action="store_true", help="L1+L2 only (no judge, v1)")
+    parser.add_argument(
+        "--engine",
+        choices=("v1", "v2"),
+        default="v1",
+        help="Defense engine (v2 uses RAGE v2 pipeline)",
+    )
     parser.add_argument("--write", action="store_true", help="Write baseline JSON")
-    parser.add_argument("--baseline", type=Path, default=DEFAULT_BASELINE)
+    parser.add_argument("--baseline", type=Path, default=None)
     args = parser.parse_args()
 
-    use_judge = not args.fast
-    metrics = _run_locked(
-        eval_set=args.eval_set,
-        combined=args.combined,
-        use_judge=use_judge,
-    )
+    if args.baseline is None:
+        args.baseline = DEFAULT_BASELINE_V2 if args.engine == "v2" else DEFAULT_BASELINE_V1
 
-    print(f"eval_set={args.eval_set} mode={'L1+L2' if args.fast else 'L1+L2+Judge'}")
+    if args.engine == "v2":
+        metrics = _run_locked_v2(eval_set=args.eval_set, combined=args.combined)
+        mode_label = "RAGE v2"
+        use_judge = False
+    else:
+        use_judge = not args.fast
+        metrics = _run_locked_v1(
+            eval_set=args.eval_set,
+            combined=args.combined,
+            use_judge=use_judge,
+        )
+        mode_label = "L1+L2" if args.fast else "L1+L2+Judge"
+
+    print(f"eval_set={args.eval_set} engine={args.engine} mode={mode_label}")
     print(
         f"recall={metrics['recall']:.1%} precision={metrics['precision']:.1%} "
         f"fp={metrics['fp']} fn={metrics['fn']} tp={metrics['tp']} total={metrics['total']}"
@@ -105,7 +146,8 @@ def main() -> int:
     if args.write:
         payload = {
             "eval_set": args.eval_set,
-            "mode": "L1+L2" if args.fast else "L1+L2+Judge",
+            "engine": args.engine,
+            "mode": mode_label,
             "use_judge": use_judge,
             "combined": args.combined,
             "metrics": metrics,

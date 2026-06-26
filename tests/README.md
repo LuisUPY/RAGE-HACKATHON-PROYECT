@@ -17,7 +17,9 @@ RAGE uses **three separate evaluation layers**. Do not conflate them.
 | `test_semantic_filter.py` | Cumulative drift, sanitizer |
 | `test_auc_metric.py` | AUC-D, TRI, hypotheses H1/H4 |
 | `test_access_policy.py` | Multi-turn verdict thresholds |
-| `test_chat_gate.py` | Track A ChatGate + session judge |
+| `tests/v2/test_user_gate.py` | UserGate + EscalationJudge |
+| `tests/fp_suite/` | 0 CONTAIN on benign corpus (CI gate) |
+| `tests/test_benchmark_locked_v2.py` | Frozen `eval_locked_v1` regression (v2) |
 | `test_product_benchmark.py` | Track B product dataset + evaluator |
 | `test_demo.py` | Demo orchestrator smoke |
 | `test_env_loader.py` | .env loading skips API secrets |
