@@ -2,13 +2,7 @@
 Interactive chat CLI: rage-chat
 
 Sales assistant protected by RAGE+Judge, backed by NVIDIA NIM.
-
-Setup:
-    export RAGE_LLM_BASE_URL=https://integrate.api.nvidia.com/v1
-    export RAGE_LLM_API_KEY=nvapi-...           (from build.nvidia.com)
-    export RAGE_LLM_MODEL=meta/llama-3.3-70b-instruct
-    export RAGE_JUDGE_MODEL=nvidia/llama-3.1-nemotron-nano-8b-v1
-    export RAGE_USE_LLM_JUDGE=1
+API keys are prompted at startup (session-only; not stored in .env).
 
 Usage:
     uv run rage-chat
@@ -33,6 +27,13 @@ def _print_signal(signal) -> None:
 
 
 def main() -> int:
+    import warnings
+
+    warnings.warn(
+        "rage-chat is deprecated; use: uv run rage-product-demo --profile restaurant",
+        DeprecationWarning,
+        stacklevel=1,
+    )
     parser = argparse.ArgumentParser(description="RAGE sales chat — powered by NVIDIA NIM")
     parser.add_argument(
         "--model",

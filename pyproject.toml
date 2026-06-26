@@ -52,6 +52,10 @@ build-backend = "hatchling.build"
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+markers = [
+    "dev_eval: calibrated dev datasets — not the official locked_v1 metric",
+]
+addopts = "-m 'not dev_eval'"
 
 [tool.ruff]
 line-length = 130

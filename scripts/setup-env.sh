@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Crea .env desde el lienzo .env.template (no sobrescribe si ya existe).
+# Crea .env con URLs/modelos por defecto (sin API keys — se piden al ejecutar demos en vivo).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -15,23 +15,19 @@ fi
 
 if [[ -f "$TARGET" ]]; then
   echo "Ya existe .env — no lo sobrescribo."
-  echo "Edita este archivo y pega tu clave:"
   echo "  $TARGET"
   echo ""
-  echo "Busca la línea:"
-  echo "  RAGE_NVIDIA_API_KEY=PEGAR_AQUI_TU_CLAVE_NVAPI"
-  echo "y sustituye PEGAR_AQUI_TU_CLAVE_NVAPI por tu nvapi-... de build.nvidia.com"
+  echo "Las API keys NO se guardan en .env."
+  echo "Al ejecutar un demo en vivo, el programa te las pedirá en pantalla."
   exit 0
 fi
 
 cp "$TEMPLATE" "$TARGET"
-echo "Creado: .env"
+echo "Creado: $TARGET (solo URLs y modelos — sin claves API)"
 echo ""
-echo "Siguiente paso — abre .env y pega TU clave NVIDIA en UNA sola línea:"
-echo ""
-echo "  RAGE_NVIDIA_API_KEY=nvapi-tu-clave-real"
-echo ""
-echo "Obtener clave: https://build.nvidia.com  →  API Keys"
-echo ""
-echo "Luego ejecuta:"
+echo "Para probar con LLM en vivo, ejecuta por ejemplo:"
 echo "  ./scripts/run-support-chat.sh"
+echo "  ./scripts/run-product-demo.sh"
+echo ""
+echo "Pega tu clave nvapi- cuando te la pida (solo esa sesión, no se guarda)."
+echo "Obtener clave: https://build.nvidia.com → API Keys"

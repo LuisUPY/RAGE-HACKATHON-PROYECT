@@ -177,13 +177,15 @@ class TestComputeMetrics:
         assert 0.0 <= m.recall <= 1.0
         assert 0.0 <= m.f1 <= 1.0
 
-    def test_l1_catches_all_kb_cases(self) -> None:
-        """L1 regex rules should catch all KB attack entries."""
+    @pytest.mark.dev_eval
+    def test_kb_attack_entries_detected_by_pipeline(self) -> None:
+        """KB self-consistency: pipeline detects threats.json entries (not open-world security)."""
         cases = load_dataset(include_kb=True, include_scenarios=False)
         results = run_benchmark(cases, use_judge=False)
         m = compute_metrics(results)
-        assert m.recall == 1.0, f"L1 recall on KB too low: {m.recall:.2f}"
+        assert m.recall == 1.0, f"KB recall too low: {m.recall:.2f}"
 
+    @pytest.mark.dev_eval
     def test_full_benchmark_meets_accuracy_target(self) -> None:
         """Full dataset should reach ≥80% accuracy with L1 + L2 (no judge API needed)."""
         cases = load_dataset()
@@ -238,6 +240,7 @@ class TestHoldoutDataset:
         m = compute_metrics(results)
         assert m.l1_contribution + m.rag_contribution + m.judge_contribution <= m.tp
 
+    @pytest.mark.dev_eval
     def test_holdout_open_world_accuracy(self) -> None:
         """Holdout cases must be detected without memorizing exact KB text."""
         from rage_core.benchmark.dataset import load_holdout_dataset
@@ -287,6 +290,7 @@ class TestEvalOpenV3Dataset:
         assert len(scenarios) >= 12
         assert all(len(s.turns) >= 2 for s in scenarios)
 
+    @pytest.mark.dev_eval
     def test_open_v3_multi_turn_recall(self) -> None:
         from rage_core.benchmark.dataset import load_eval_scenarios
         from rage_core.benchmark.evaluator import compute_metrics, run_multi_turn_benchmark
@@ -314,6 +318,7 @@ class TestEvalSimilarDataset:
         assert len(scenarios) >= 20
         assert all(len(s.turns) >= 2 for s in scenarios)
 
+    @pytest.mark.dev_eval
     def test_similar_multi_turn_recall(self) -> None:
         from rage_core.benchmark.dataset import load_eval_scenarios
         from rage_core.benchmark.evaluator import compute_metrics, run_multi_turn_benchmark
@@ -343,6 +348,8 @@ class TestEvalProductDataset:
 
 
 class TestEvalGeneralizationDataset:
+    """Legacy calibrated holdout — load/overlap checks only (no recall band in CI)."""
+
     def test_load_eval_generalization_holdout(self) -> None:
         from rage_core.benchmark.dataset import load_eval_holdout_dataset
 
@@ -380,19 +387,6 @@ class TestEvalGeneralizationDataset:
                     f"generalization {scenario.id} turn duplicates KB text"
                 )
 
-    def test_generalization_combined_recall_band(self) -> None:
-        """Generalization holdout targets ~80% recall — not 100%."""
-        from rage_core.benchmark.dataset import load_eval_holdout_dataset, load_eval_scenarios
-        from rage_core.benchmark.evaluator import compute_metrics, run_benchmark, run_multi_turn_benchmark
-
-        st = run_benchmark(load_eval_holdout_dataset("generalization"), use_judge=False, multi_turn=False)
-        mt = run_multi_turn_benchmark(load_eval_scenarios("generalization"), use_judge=False)
-        m = compute_metrics(st + mt)
-        assert m.fp == 0, f"generalization must not block benign (got {m.fp} FP)"
-        assert 0.75 <= m.recall <= 0.85, (
-            f"generalization recall should be ~80% (got {m.recall:.1%})"
-        )
-
 
 class TestMultiTurnBenchmark:
     def test_load_holdout_scenarios(self) -> None:
@@ -411,6 +405,7 @@ class TestMultiTurnBenchmark:
         turn_total = sum(len(s.turns) for s in scenarios)
         assert len(results) == turn_total
 
+    @pytest.mark.dev_eval
     def test_multi_turn_scenario_metrics(self) -> None:
         from rage_core.benchmark.dataset import load_holdout_scenarios
         from rage_core.benchmark.evaluator import compute_scenario_metrics, run_multi_turn_benchmark

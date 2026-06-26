@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Verifica que el clone de RAGE esté completo antes de uv sync / rage-training.
+# Verifica que el clone de RAGE esté completo antes de uv sync.
 set -euo pipefail
 
 echo "=== RAGE setup check ==="
@@ -26,7 +26,7 @@ if [[ ! -d rage_core ]]; then
   echo "   Causas habituales:"
   echo "   1. Estás en una subcarpeta (ej. RAGE-HACKATHON-PROYECT/RAGE-HACKATHON-PROYECT/)"
   echo "   2. Clone viejo o fork desactualizado"
-  echo "   3. Descargaste solo Training-Center, no el repo completo"
+  echo "   3. Descargaste solo una subcarpeta del repo, no el proyecto completo"
   echo ""
   echo "   Busca rage_core en el árbol:"
   found=$(find . -maxdepth 4 -type d -name rage_core 2>/dev/null | head -3 || true)
@@ -61,7 +61,8 @@ echo ""
 if [[ $fail -eq 0 ]]; then
   echo "✅ Estructura OK. Siguiente paso:"
   echo "   uv sync"
-  echo "   uv run rage-training"
+  echo "   ./scripts/run-tests.sh -q"
+  echo "   Ver QUICKSTART.md para demos Track A/B"
   exit 0
 else
   echo "❌ Corrige la ubicación o re-clona antes de continuar."

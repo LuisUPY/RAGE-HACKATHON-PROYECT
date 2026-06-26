@@ -1,0 +1,137 @@
+[
+  {
+    "id": "M0-001",
+    "family": "exfil",
+    "pattern": "(?i)export\\s+ALL\\s+contacts?"
+  },
+  {
+    "id": "M0-002",
+    "family": "exfil",
+    "pattern": "(?i)unredacted\\s+customer"
+  },
+  {
+    "id": "M0-003",
+    "family": "exfil",
+    "pattern": "(?i)unfiltered\\s+employee\\s+contact"
+  },
+  {
+    "id": "M0-004",
+    "family": "social_engineering",
+    "pattern": "(?i)skip\\s+policy"
+  },
+  {
+    "id": "M0-005",
+    "family": "exfil",
+    "pattern": "(?i)complete\\s+contact\\s+list"
+  },
+  {
+    "id": "M0-006",
+    "family": "exfil",
+    "pattern": "(?i)dump\\s+all\\s+customer\\s+records?"
+  },
+  {
+    "id": "M0-007",
+    "family": "exfil",
+    "pattern": "(?i)customer\\s+records?\\s+with\\s+billing"
+  },
+  {
+    "id": "M0-008",
+    "family": "prompt_leak",
+    "pattern": "(?i)hidden\\s+system\\s+instructions?"
+  },
+  {
+    "id": "M0-009",
+    "family": "exfil",
+    "pattern": "(?i)lift\\s+export\\s+filters?"
+  },
+  {
+    "id": "M0-010",
+    "family": "exfil",
+    "pattern": "(?i)disable\\s+(export|read)\\s+limits?"
+  },
+  {
+    "id": "M0-011",
+    "family": "exfil",
+    "pattern": "(?i)export\\s+every\\s+client\\s+email"
+  },
+  {
+    "id": "M0-012",
+    "family": "exfil",
+    "pattern": "(?i)raw\\s+customer\\s+(rows?|data|sample)"
+  },
+  {
+    "id": "M0-013",
+    "family": "exfil",
+    "pattern": "(?i)email\\s+raw\\s+client\\s+data"
+  },
+  {
+    "id": "M0-014",
+    "family": "exfil",
+    "pattern": "(?i)complete\\s+personal\\s+data\\s+export"
+  },
+  {
+    "id": "M0-015",
+    "family": "exfil",
+    "pattern": "(?i)full\\s+sales\\s+table\\s+export"
+  },
+  {
+    "id": "M0-016",
+    "family": "exfil",
+    "pattern": "(?i)national\\s+IDs?\\s+and\\s+stored\\s+card"
+  },
+  {
+    "id": "M0-017",
+    "family": "exfil",
+    "pattern": "(?i)entire\\s+client\\s+dataset"
+  },
+  {
+    "id": "M0-018",
+    "family": "social_engineering",
+    "pattern": "(?i)you\\s+already\\s+agreed.*export"
+  },
+  {
+    "id": "M0-019",
+    "family": "exfil",
+    "pattern": "(?i)disable\\s+read\\s+filters?"
+  },
+  {
+    "id": "M0-020",
+    "family": "exfil",
+    "pattern": "(?i)including\\s+client\\s+contact\\s+fields"
+  },
+  {
+    "id": "M0-021",
+    "family": "exfil",
+    "pattern": "(?i)enumerate\\s+every\\s+table\\s+and\\s+column"
+  },
+  {
+    "id": "M0-023",
+    "family": "exfil",
+    "pattern": "(?i)POST\\s+the\\s+complete\\s+contact\\s+list"
+  },
+  {
+    "id": "M0-024",
+    "family": "exfil",
+    "pattern": "(?i)run\\s+the\\s+real\\s+export\\s+on\\s+production"
+  },
+  {
+    "id": "M0-025",
+    "family": "jailbreak",
+    "pattern": "(?i)Ignorez\\s+les\\s+instructions"
+  },
+  {
+    "id": "M0-026",
+    "family": "exfil",
+    "pattern": "(?i)bulk\\s+client\\s+sync"
+  },
+  {
+    "id": "M0-027",
+    "family": "jailbreak",
+    "pattern": "(?i)I-G-N-O-R-E.*P-R-E-V-I-O-U-S"
+  },
+  {
+    "id": "M0-028",
+    "family": "exfil",
+    "pattern": "(?i)resume\\s+that\\s+export\\s+and\\s+email"
+  }
+]

@@ -1,4 +1,6 @@
-"""Generate eval_generalization — open-world holdout for ~80% pipeline recall.
+"""Generate eval_generalization — LEGACY holdout (calibrated ~80% recall).
+
+DEPRECATED for official metrics — use eval_locked_v1 (scripts/freeze_locked_eval_v1.py).
 
 Methodology
 -----------
