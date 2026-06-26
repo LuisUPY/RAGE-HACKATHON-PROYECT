@@ -17,7 +17,7 @@ User message
 
 1. Copy `rage_core/profiles/restaurant.json` → `mycompany.json`
 2. Edit: `role`, `purpose`, `allowed_topics`, `forbidden_actions`, `system_prompt`
-3. Run: `uv run rage-chat-profile --profile mycompany`
+3. Run: `uv run rage-product-demo --profile mycompany`
 
 ## Built-in profiles
 
@@ -31,13 +31,15 @@ User message
 
 ```bash
 # Offline — validate gate + judge rules (no API)
-./scripts/run-profile-chat.sh --profile restaurant --offline
+./scripts/run-product-demo.sh --profile restaurant --offline
 
-# With API — assistant + session judge (NVIDIA/OpenAI)
-./scripts/run-profile-chat.sh --profile support
+# With API — dual-model wizard (assistant + judge)
+./scripts/run-product-demo.sh --profile support
 
-uv run rage-chat-profile --list-profiles
+./scripts/run-product-demo.sh --list-profiles
 ```
+
+Legacy (deprecated): `run-profile-chat.sh` / `rage-chat-profile` — same profiles, older single-API CLI.
 
 ## Hypothesis this validates
 
@@ -53,3 +55,5 @@ uv run rage-chat-profile --list-profiles
 | `rage_core/gate/chat_gate.py` | RAGE → judge orchestration |
 | `rage_core/judge/session_judge.py` | ALLOW/BLOCK/DENY with context |
 | `rage_core/chat/profile_chatbot.py` | End-to-end chat shell |
+
+See also [PRODUCT_DEMO.md](PRODUCT_DEMO.md) for the full Track A demo.

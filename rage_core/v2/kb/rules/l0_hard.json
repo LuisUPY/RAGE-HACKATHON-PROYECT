@@ -1,0 +1,102 @@
+[
+  {
+    "id": "H0-001",
+    "family": "jailbreak",
+    "pattern": "(?i)ignore\\s+(all\\s+)?(previous|prior|above)\\s+instructions"
+  },
+  {
+    "id": "H0-002",
+    "family": "jailbreak",
+    "pattern": "(?i)disregard\\s+(all\\s+)?(previous|prior|system)\\s+(instructions|rules)"
+  },
+  {
+    "id": "H0-003",
+    "family": "jailbreak",
+    "pattern": "(?i)you\\s+are\\s+now\\s+(in\\s+)?(DAN|developer|unrestricted)\\s+mode"
+  },
+  {
+    "id": "H0-004",
+    "family": "exfil",
+    "pattern": "(?i)reveal\\s+(your\\s+)?(system\\s+)?prompt"
+  },
+  {
+    "id": "H0-005",
+    "family": "exfil",
+    "pattern": "(?i)(print|show|dump)\\s+(the\\s+)?(system|hidden)\\s+prompt"
+  },
+  {
+    "id": "H0-006",
+    "family": "exfil",
+    "pattern": "(?i)(api[_\\s-]?key|secret[_\\s-]?key|bearer\\s+token)\\s*(=|:)?\\s*['\"]?[A-Za-z0-9_\\-]{20,}"
+  },
+  {
+    "id": "H0-007",
+    "family": "sql_destructive",
+    "pattern": "(?i)\\bDROP\\s+TABLE\\b"
+  },
+  {
+    "id": "H0-008",
+    "family": "sql_destructive",
+    "pattern": "(?i)\\bDELETE\\s+FROM\\s+\\w+\\s*;?"
+  },
+  {
+    "id": "H0-009",
+    "family": "sql_destructive",
+    "pattern": "(?i)\\bTRUNCATE\\s+TABLE\\b"
+  },
+  {
+    "id": "H0-010",
+    "family": "sql_destructive",
+    "pattern": "(?i)\\bGRANT\\s+ALL\\s+PRIVILEGES\\b"
+  },
+  {
+    "id": "H0-011",
+    "family": "exfil",
+    "pattern": "(?i)export\\s+all\\s+(customer|client|user)\\s+(phone|email|contact)"
+  },
+  {
+    "id": "H0-012",
+    "family": "exfil",
+    "pattern": "(?i)dump\\s+(the\\s+)?(entire|full)\\s+(database|db|customer\\s+list)"
+  },
+  {
+    "id": "H0-013",
+    "family": "jailbreak",
+    "pattern": "(?i)bypass\\s+(all\\s+)?(safety|security|restrictions|filters)"
+  },
+  {
+    "id": "H0-014",
+    "family": "jailbreak",
+    "pattern": "(?i)pretend\\s+you\\s+have\\s+no\\s+(rules|restrictions|guidelines)"
+  },
+  {
+    "id": "H0-015",
+    "family": "exfil",
+    "pattern": "(?i)(gateway|break-glass|service)\\s+token"
+  },
+  {
+    "id": "H0-016",
+    "family": "exfil",
+    "pattern": "(?i)break-glass\\s+pin"
+  },
+  {
+    "id": "H0-017",
+    "family": "jailbreak",
+    "pattern": "(?i)from\\s+now\\s+on\\s+you\\s+(must|will|shall)\\s+obey"
+  },
+  {
+    "id": "H0-018",
+    "family": "exfil",
+    "pattern": "(?i)send\\s+all\\s+documents?\\s+to\\s+https?://"
+  },
+  {
+    "id": "H0-019",
+    "family": "jailbreak",
+    "pattern": "(?i)override\\s+(your\\s+)?(system|safety)\\s+(prompt|instructions)"
+  },
+  {
+    "id": "H0-020",
+    "family": "exfil",
+    "pattern": "(?i)list\\s+all\\s+reservation\\s+phone\\s+numbers"
+  }
+]

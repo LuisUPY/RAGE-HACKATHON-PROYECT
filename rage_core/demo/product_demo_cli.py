@@ -5,10 +5,12 @@ import argparse
 import sys
 
 from rage_core.chat.profile_chatbot import ProfileChatResult, ProfileChatbot
+from rage_core.chat.profile_chatbot_v2 import ProfileChatResultV2, ProfileChatbotV2
 from rage_core.demo.bootstrap import ensure_llm_ready
 from rage_core.gate.chat_gate import GateResult
 from rage_core.llm.openai_compat import get_judge_model, get_llm_model, llm_judge_enabled
 from rage_core.profiles.bot_profile import list_profiles, load_bot_profile
+from rage_core.v2.enforce.user_gate import UserGateResult
 
 
 def _short_name(profile) -> str:
@@ -41,6 +43,40 @@ def _print_gate_panel(gate: GateResult) -> None:
     print(f"  Briefing: {gate.briefing.to_text().replace(chr(10), ' | ')}")
 
 
+def _print_gate_panel_v2(gate: UserGateResult) -> None:
+    s = gate.signals
+    print(f"  [RAGE v2] {gate.action.upper()} — score {gate.score:.0f} — {gate.verdict.value}")
+    print(
+        f"  L0: {s.l0.rule_id or '—'}  "
+        f"L1 domain: {s.l1.domain_score:.2f}  "
+        f"trajectory: {s.l2.trajectory_score:.2f}  "
+        f"hint: {s.l3.hint_score:.2f}"
+    )
+    if gate.reasons:
+        print(f"  Reasons: {', '.join(gate.reasons)}")
+
+
+def _print_last_v2(turn: ProfileChatResultV2 | None) -> None:
+    if turn is None:
+        print("  (sin turnos aún)")
+        return
+    gate = turn.gate
+    print("  --- Último turno — RAGE v2 ---")
+    print(f"  Usuario   : {turn.user_text[:120]}")
+    print(f"  Veredicto : {gate.verdict.value.upper()}  (acción={gate.action})")
+    _print_gate_panel_v2(gate)
+    if turn.gate.blocked:
+        print(f"  Respuesta : {turn.assistant_text[:200]}")
+    print(f"  [RAGE] {gate.rage_ms:.0f}ms  |  total {turn.total_ms:.0f}ms")
+
+
+def _format_latency_v2(turn: ProfileChatResultV2) -> str:
+    return (
+        f"  [RAGE v2] {turn.gate.verdict.value}  |  "
+        f"RAGE {turn.rage_ms:.0f}ms  |  total {turn.total_ms:.0f}ms"
+    )
+
+
 def _print_last(turn: ProfileChatResult | None) -> None:
     if turn is None:
         print("  (sin turnos aún)")
@@ -68,6 +104,11 @@ def main() -> int:
     )
     parser.add_argument("--list-profiles", action="store_true", help="Listar perfiles")
     parser.add_argument("--offline", action="store_true", help="Sin API — juez por reglas + respuestas mock")
+    parser.add_argument(
+        "--v2",
+        action="store_true",
+        help="Motor RAGE v2 (ALERT no bloquea; solo CONTAIN detiene el chat)",
+    )
     parser.add_argument("--model", default=None, help="Modelo asistente (override)")
     args = parser.parse_args()
 
@@ -93,6 +134,10 @@ def main() -> int:
             return 1
 
     model = args.model or get_llm_model()
+
+    if args.v2:
+        return _run_v2_loop(profile, model=model, offline=args.offline)
+
     bot = ProfileChatbot(profile=profile, model=model)
     show_latency = True
     verbose_rage = False
@@ -170,6 +215,78 @@ def main() -> int:
             _print_gate_panel(turn.gate)
         if show_latency:
             print(_format_latency(turn))
+
+
+def _run_v2_loop(profile, *, model: str, offline: bool) -> int:
+    bot = ProfileChatbotV2(profile=profile, model=model)
+    show_latency = True
+    verbose_rage = False
+    last_turn: ProfileChatResultV2 | None = None
+
+    print()
+    print("=" * 62)
+    print(f"  RAGE Product Demo v2 — {profile.display_name}")
+    print(f"  Rol      : {profile.role}")
+    print(f"  Propósito: {profile.purpose[:70]}...")
+    print("  Modo     : v2 UserGate (ALERT continúa chat)")
+    if offline:
+        print("  API      : OFFLINE")
+    else:
+        print(f"  Asistente: {model}")
+    print("-" * 62)
+    print("  /quit  /reset  /profile  /last  /latency  /verbose")
+    print("=" * 62)
+
+    while True:
+        try:
+            user_text = input("\nUsuario> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nSesión terminada.")
+            return 0
+
+        if not user_text:
+            continue
+        low = user_text.lower()
+        if low in ("/quit", "/exit", "/q"):
+            return 0
+        if low == "/reset":
+            bot.reset()
+            last_turn = None
+            print("  Estado reiniciado.")
+            continue
+        if low == "/profile":
+            print(profile.judge_context_block())
+            continue
+        if low == "/last":
+            _print_last_v2(last_turn)
+            continue
+        if low == "/latency":
+            show_latency = not show_latency
+            print(f"  Latencia por turno: {'ON' if show_latency else 'OFF'}")
+            continue
+        if low == "/verbose":
+            verbose_rage = not verbose_rage
+            print(f"  Panel RAGE siempre: {'ON' if verbose_rage else 'OFF'}")
+            continue
+
+        turn = bot.handle_turn(user_text, offline=offline)
+        last_turn = turn
+
+        if turn.gate.alert_banner and not turn.gate.blocked:
+            print(f"\n[Sistema]> {turn.gate.alert_banner}")
+
+        if turn.gate.blocked:
+            print(f"\n[Sistema]> {turn.assistant_text}")
+        else:
+            body = turn.assistant_text
+            if turn.gate.alert_banner and body.startswith(turn.gate.alert_banner):
+                body = body[len(turn.gate.alert_banner) :].lstrip()
+            print(f"\n{_short_name(profile)}> {body}")
+
+        if verbose_rage or turn.gate.verdict.value in ("alert", "contain", "watch"):
+            _print_gate_panel_v2(turn.gate)
+        if show_latency:
+            print(_format_latency_v2(turn))
 
 
 if __name__ == "__main__":

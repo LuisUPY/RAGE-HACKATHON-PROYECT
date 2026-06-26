@@ -1,4 +1,4 @@
-"""LLM client helpers (OpenAI API and Ollama-compatible endpoints)."""
+"""LLM client helpers (OpenAI-compatible APIs, e.g. NVIDIA NIM)."""
 
 from rage_core.llm.openai_compat import (
     diagnose_llm_setup,

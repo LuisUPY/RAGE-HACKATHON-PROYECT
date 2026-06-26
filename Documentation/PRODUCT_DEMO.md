@@ -92,21 +92,11 @@ Copy `/last` output after interesting turns for notes or appendix material.
 
 - [PRODUCT_FOUNDATION.md](PRODUCT_FOUNDATION.md) — architecture overview
 - [PRODUCT_BENCHMARK.md](PRODUCT_BENCHMARK.md) — Track B automated benchmark (~20 cases)
-- `./scripts/run-profile-chat.sh` — earlier profile chat CLI (single API prompt)
 - `./scripts/run-bench-product.sh` — Track B batch runner with JSON/CSV export
 
-## Environment variables (optional, non-interactive)
+## API keys (interactive vs CI)
 
-If you prefer `.env` over the wizard:
+- **Interactive terminal:** keys are prompted at startup (session-only, not saved to disk).
+- **CI / non-interactive:** export `RAGE_LLM_API_KEY` or `OPENAI_API_KEY` in the job environment.
 
-```bash
-export RAGE_LLM_BASE_URL=https://integrate.api.nvidia.com/v1
-export RAGE_LLM_API_KEY=nvapi-...
-export RAGE_LLM_MODEL=meta/llama-3.3-70b-instruct
-export RAGE_JUDGE_BASE_URL=https://integrate.api.nvidia.com/v1
-export RAGE_JUDGE_API_KEY=nvapi-...
-export RAGE_JUDGE_MODEL=nvidia/llama-3.1-nemotron-nano-8b-v1
-export RAGE_USE_LLM_JUDGE=1
-```
-
-Then run with `force_prompt` disabled only if you patch the CLI or use `rage-chat-profile` with existing `.env`.
+Legacy CLI (deprecated): `./scripts/run-profile-chat.sh` / `rage-chat-profile` — use `run-product-demo.sh` instead.

@@ -1,5 +1,7 @@
 # RAGE: Robust Agentic Security Gateway for Text-to-SQL — Defending Against Multi-Turn Crescendo Attacks
 
+> **Archived extended paper.** Training-Center and Ollama modules described here are on experimental branches, not `main`. See [ROADMAP.md](../../ROADMAP.md) and [draft_submission.md](../../draft_submission.md) for the shipped product.
+
 **Authors:** RAGE Research Team  
 **Venue:** Global South AI Safety Hackathon, June 2026  
 **Repository:** `rage-multiturn` — Python 3.12, MIT License  
@@ -9,7 +11,7 @@
 
 ## Abstract
 
-Text-to-SQL interfaces that connect language models to relational databases expose an attack surface where an adversary can gradually migrate a legitimate session toward destructive queries without triggering stateless filters. Russinovich et al. demonstrated that *Crescendo* achieves 98–100% success rates on aligned models using exclusively benign prompts distributed across N turns. We present **RAGE** (*Robust Agentic Security Gateway for Text-to-SQL*), a four-layer framework with a stateful semantic filter, EWMA decision engine with a consecutive-warn ratchet, and a hardened SQL gateway. We integrate the **Training-Center**, an interactive environment for simulation and hyperparameter calibration. We introduce the **AUC-D** (Area Under the Curve of Degradation) and **TRI** (Temporal Resistance Index) metrics. We validate with **206 automated regression tests** (`pytest`, code contracts) and an **out-of-KB generalization holdout** (**80.6% recall**, **0% FP**)—calibrated deliberately to avoid overfitting to prepared scenarios. On `SCENARIO_CRESCENDO`, RAGE blocks T4–T5 via layers 3, 4, and the gateway.
+Text-to-SQL interfaces that connect language models to relational databases expose an attack surface where an adversary can gradually migrate a legitimate session toward destructive queries without triggering stateless filters. Russinovich et al. demonstrated that *Crescendo* achieves 98–100% success rates on aligned models using exclusively benign prompts distributed across N turns. We present **RAGE** (*Robust Agentic Security Gateway for Text-to-SQL*), a four-layer framework with a stateful semantic filter, EWMA decision engine with a consecutive-warn ratchet, and a hardened SQL gateway. We integrate the **Training-Center**, an interactive environment for simulation and hyperparameter calibration. We introduce the **AUC-D** (Area Under the Curve of Degradation) and **TRI** (Temporal Resistance Index) metrics. We validate with **232 automated regression tests** (`pytest`, code contracts) and an **out-of-KB generalization holdout** (**80.6% recall**, **0% FP**)—calibrated deliberately to avoid overfitting to prepared scenarios. On `SCENARIO_CRESCENDO`, RAGE blocks T4–T5 via layers 3, 4, and the gateway.
 
 ---
 
@@ -199,6 +201,8 @@ Allowed tables: `{sales, products, regions}`. Expanded blocklist with 21 pattern
 
 ## 4. Simulation and Learning Environment: Training-Center Infrastructure
 
+> **Note (`main` branch):** the shipped product includes Track A/B and runtime KB hot-update. The `rage_core/training/` module and `Training-Center/` directory live on experimental branches (`cursor/rage-v3-93a0`); see `ROADMAP.md` in the repository.
+
 The `rage_core/training/` module and the `Training-Center/` directory constitute the **interactive infrastructure contribution** developed during the June 2026 hackathon. Its purpose is threefold: (i) simulate reproducible attack/defence scenarios, (ii) calibrate hyperparameters (`ewma_alpha`, `ratchet_turns`, session thresholds), and (iii) generate candidates for KB hot-update against new Crescendomation variants.
 
 ### 4.1 Architecture
@@ -263,7 +267,7 @@ RAGE separates **code regression** from **open-world security evaluation**. We d
 
 #### Layer A — Regression (`pytest`)
 
-`uv run pytest tests/ -v` runs **206 automated tests** (8 modules): SQL gateway, L1–L4 pipeline, cumulative drift, AUC-D/TRI, dataset integrity, demo smoke. CI fails if generalization holdout duplicates KB text (`test_generalization_no_kb_text_overlap`).
+`uv run pytest tests/ -v` runs **232 automated tests** (10 modules): SQL gateway, L1–L4 pipeline, cumulative drift, AUC-D/TRI, Track A/B (chat gate, product benchmark), dataset integrity, demo smoke. CI fails if generalization holdout duplicates KB text (`test_generalization_no_kb_text_overlap`).
 
 | Module | Tests | Coverage |
 |--------|-------|----------|

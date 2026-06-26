@@ -13,7 +13,7 @@ echo ""
 bash scripts/check_setup.sh
 ./scripts/run-tests.sh -q
 ./scripts/run-bench-product.sh --offline --batch
-./scripts/run-bench-generalization.sh
+./scripts/run-bench-locked.sh
 ./scripts/run-ablation.sh
 ./scripts/generate_submission_pdf.sh
 

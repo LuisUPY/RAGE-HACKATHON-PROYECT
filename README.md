@@ -22,181 +22,80 @@ User turn → [L1: Regex] → [L2: RAG KB] → [L3: Semantic Filter] → [L4: De
 
 - **Layer 1**: deterministic regex/signature pre-filter (zero cost).
 - **Layer 2**: TF-IDF cosine similarity against a curated threat KB (8 OWASP LLM01 families, offline).
-- **Layer 3** *(the core)*: computes embedding drift between the current turn and the previous intent summary. LLM judge called only when drift > threshold (optional, behind `OPENAI_API_KEY`).
-- **Layer 4**: fuses L1–L3 signals into a score 0–100 and assigns a band (`allow` / `warn` / `block`).
-- **Gateway**: allowlists `SELECT` queries against known tables; blocks `DROP`, `DELETE`, `GRANT`, etc.
+- **Layer 3** *(the core)*: embedding drift between turns; optional LLM judge when drift exceeds threshold.
+- **Layer 4**: fuses L1–L3 into score 0–100 and band (`allow` / `warn` / `block`).
+- **Gateway**: allowlists `SELECT` on known tables; blocks `DROP`, `DELETE`, `GRANT`, etc.
 
 ## Quick Start
+
+**All commands:** [QUICKSTART.md](QUICKSTART.md) — install, tests, research demo, Track A/B, API keys.
 
 ### Requirements
 
 - [uv](https://docs.astral.sh/uv/) ≥ 0.4.27
-- Python 3.12 (managed automatically by uv)
+- Python 3.12 (managed by uv)
 
 ### Install
 
-**Clone limpio (recomendado si `rage_core` no aparece):**
-
 ```bash
-cd ~
 git clone https://github.com/LuisUPY/RAGE-HACKATHON-PROYECT.git
 cd RAGE-HACKATHON-PROYECT
-bash scripts/check_setup.sh    # debe decir "Estructura OK"
+bash scripts/check_setup.sh    # must print "Estructura OK"
 uv sync
 ```
 
-Verificación manual:
+> Clone to a **single** top-level folder (`~/RAGE-HACKATHON-PROYECT/` with `rage_core/` next to this file). If `uv sync` resolves only 2 packages, check `git remote -v` points to `LuisUPY/RAGE-HACKATHON-PROYECT`.
 
-```bash
-ls rage_core pyproject.toml tests
-grep rage-multiturn pyproject.toml
-```
-
-Deberías ver carpetas `demo`, `layers`, `training` dentro de `rage_core/`.
-
-> **No clones dentro de otra carpeta del mismo nombre** — evita
-> `RAGE-HACKATHON-PROYECT/RAGE-HACKATHON-PROYECT/`. Un solo nivel:
-> `~/RAGE-HACKATHON-PROYECT/` con `rage_core/` al mismo nivel que `README.md`.
-
-> Si `uv sync` dice `Resolved 2 packages` o `ls rage_core` falla, estás en el
-> directorio equivocado o el remote apunta a un fork viejo. Ejecuta
-> `git remote -v` y confirma `LuisUPY/RAGE-HACKATHON-PROYECT`.
-
-### Run the demo
-
-**Offline (CI / sin API key):**
+### Try it (offline, no API key)
 
 ```bash
 uv run rage-demo --offline --core --no-plot
 ```
 
-**Demo completa con juez LLM (pide tu API key NVIDIA/OpenAI al iniciar):**
+Live demos (research, product chat, support, benchmarks) prompt for API keys at startup — session-only, not stored in `.env`. See [QUICKSTART.md](QUICKSTART.md).
+
+### Evaluation
+
+- **233 pytest tests** — code contracts (`./scripts/run-tests.sh`)
+- **Frozen holdout** — `eval_locked_v1` + snapshot regression (`./scripts/run-bench-locked.sh`)
+
+Do not conflate them. See [tests/README.md](tests/README.md) and [Documentation/EVALUATION.md](Documentation/EVALUATION.md).
+
+### Product tracks
+
+| Track | Entry | Docs |
+|-------|-------|------|
+| **A** — company chatbot demo | `./scripts/run-product-demo.sh` | [PRODUCT_DEMO.md](Documentation/PRODUCT_DEMO.md) |
+| **B** — product benchmark (~20 cases) | `./scripts/run-bench-product.sh --offline --batch` | [PRODUCT_BENCHMARK.md](Documentation/PRODUCT_BENCHMARK.md) |
+
+Foundation: [PRODUCT_FOUNDATION.md](Documentation/PRODUCT_FOUNDATION.md). Experimental modules (Training-Center, Ollama): [ROADMAP.md](ROADMAP.md).
+
+### Global South submission
+
+Authors: Luis Gerardo Escalante Velázquez, Armando Alberto Rivas Quevedo, Juan Emiliano Quintal Chuc, Alette Guadalupe Martínez Juárez.
 
 ```bash
-./scripts/run-demo.sh
-# o
-uv run rage-demo
-uv run rage-demo --core --verbose          # 14 escenarios multi-turno
-uv run rage-demo --scenario probe_subtle_board --verbose
+./scripts/validate-all.sh                    # full check before release
+./scripts/generate_submission_pdf.sh         # edit draft_submission.md first
 ```
 
-~33 escenarios (18 multi-turno + 15 probes single-turn). El juez LLM evalúa casos sutiles que L1/L2 solos no capturan.
-
-**Interactive IT support chat (requires NVIDIA/OpenAI API key):**
-
-```bash
-./scripts/setup-env.sh          # once: create .env
-# edit .env → paste RAGE_NVIDIA_API_KEY=nvapi-...
-./scripts/run-support-chat.sh
-# or full demo entry:
-uv run rage-demo --support
-```
-
-**Benchmark / generalization eval:**
-
-```bash
-./scripts/run-bench-generalization.sh          # ~1s offline
-./scripts/run-bench-generalization.sh --full   # with LLM judge
-```
-
-**Global South hackathon submission (PDF ≤ 8 pages):**
-
-Template: [aisafetymexico/global-south-ais-template](https://github.com/aisafetymexico/global-south-ais-template)
-
-```bash
-# Validación completa (tests + benchmark + PDF)
-./scripts/validate-all.sh
-
-# Solo PDF (editar draft_submission.md antes)
-./scripts/generate_submission_pdf.sh
-# → Documentation/GlobalSouth-RAGE-Submission.pdf
-```
-
-Descarga directa del paper:  
-https://github.com/LuisUPY/RAGE-HACKATHON-PROYECT/raw/main/Documentation/GlobalSouth-RAGE-Submission.pdf
-
-**Product foundation (adaptable company chatbots):**
-
-```bash
-./scripts/run-product-demo.sh                              # Track A — dual API + latencia
-./scripts/run-product-demo.sh --profile restaurant --offline
-./scripts/run-profile-chat.sh --profile support            # CLI anterior
-```
-
-See [Documentation/PRODUCT_DEMO.md](Documentation/PRODUCT_DEMO.md), [Documentation/PRODUCT_BENCHMARK.md](Documentation/PRODUCT_BENCHMARK.md), and [Documentation/PRODUCT_FOUNDATION.md](Documentation/PRODUCT_FOUNDATION.md).
-
-**Track B product benchmark (~20 cases):**
-
-```bash
-./scripts/run-bench-product.sh --offline --batch          # CI
-./scripts/run-bench-product.sh --live --output results/product_run.json
-uv run python scripts/analyze_bench.py results/product_run.json
-```
-
-### Run tests
-
-Two layers — **do not confuse them**:
-
-```bash
-# 1. Regression (232 automated tests — code contracts)
-./scripts/run-tests.sh
-
-# 2. Open-world security benchmark (~80% recall holdout, 0% FP)
-./scripts/run-bench-generalization.sh
-```
-
-See [tests/README.md](tests/README.md). Passing all pytest tests means the implementation is consistent; **attack recall on unseen prompts is ~80%**, not 100%.
-
-### Run Crescendo red-teaming (Training-Center)
-
-```bash
-uv sync                   # first time only (from repo root)
-uv run rage-training
-uv run rage-training-apply
-```
-
-Fallback without uv scripts:
-
-```bash
-uv run python -m rage_core.training.cli
-uv run python -m rage_core.training.apply
-```
-
-See [Training-Center/README.md](Training-Center/README.md) for ASR metrics and KB hardening loop.
-
-**Manual completo (PDF):** [Manuales/training-center-manual.pdf](Manuales/training-center-manual.pdf) — guía en español de `rage-training`, `rage-redteam` v3 y flujos de trabajo.
-
-### Windows 11 + Ollama (GPU local)
-
-Ver [windows-ollama/README.md](windows-ollama/README.md) para setup con NVIDIA RTX 5050, scripts PowerShell y `rage-chat`.
-
-### Mac M1 + Ollama (8 GB RAM)
-
-Ver [mac-ollama/README.md](mac-ollama/README.md) para setup en Apple Silicon, scripts bash y preset `m1-8gb.env`.
-
-### Lint
-
-```bash
-uv run ruff check .
-```
+PDF: [Documentation/GlobalSouth-RAGE-Submission.pdf](Documentation/GlobalSouth-RAGE-Submission.pdf)
 
 ## Optional: Better embeddings
 
-By default, Layer 2 and Layer 3 use TF-IDF (offline, no download). For higher quality embeddings:
+Default: TF-IDF (offline). Alternatives:
 
 ```bash
-# sentence-transformers (downloads ~80 MB model on first run)
 uv sync --extra transformers
-RAGE_EMBEDDER=transformers uv run rage-demo
+RAGE_EMBEDDER=transformers uv run rage-demo --offline
 
-# OpenAI embeddings (requires API key)
-export OPENAI_API_KEY=sk-...
-RAGE_EMBEDDER=openai uv run rage-demo
+# OpenAI embeddings: export OPENAI_API_KEY in shell/CI (not saved to .env by default)
+RAGE_EMBEDDER=openai uv run rage-demo --offline
 ```
 
 ## Threat KB Schema
 
-The knowledge base lives in `rage_core/kb/threats.json`. Each entry:
+Knowledge base: `rage_core/kb/threats.json`. Dataset index: [rage_core/kb/README.md](rage_core/kb/README.md).
 
 ```json
 {
@@ -209,16 +108,7 @@ The knowledge base lives in `rage_core/kb/threats.json`. Each entry:
 }
 ```
 
-| Field | Description |
-|---|---|
-| `id` | Unique identifier |
-| `category` | Attack family (8 families seeded) |
-| `technique` | Human-readable technique name |
-| `owasp_id` | OWASP LLM risk (LLM01–LLM10) |
-| `severity` | `low` / `medium` / `high` / `critical` |
-| `text` | Example attack text used for embedding |
-
-### Add a new threat at runtime (hot update, no retraining)
+### Add a new threat at runtime (hot update)
 
 ```python
 from rage_core.layers.layer2_rag import ThreatKBRetriever
@@ -232,20 +122,13 @@ kb.add_threat({
     "severity": "high",
     "text": "Example of the new attack pattern",
 })
-score = kb.score("similar novel attack")
 ```
 
-## How to Interpret the AUC Curves
+For automated Crescendo campaigns (`rage-training`), see [ROADMAP.md](ROADMAP.md).
 
-The output figure `auc_results.png` shows:
+## AUC Curves
 
-- **Y axis**: vulnerability score per turn (0–5, ground truth)
-- **X axis**: conversation turn number
-- **Dashed line**: undefended agent — scores escalate over turns
-- **Solid line**: defended agent — scores stay near 0
-- **Vertical dotted line**: first turn where score ≥ 4 (compromise turn)
-
-**AUC normalized closer to 0 = better defense.** The metric captures temporal resilience: a system that collapses at turn 5 is worse than one that collapses at turn 2 (both compromised, but the first gave the attacker more turns of damage).
+`auc_results.png`: Y = ground-truth vulnerability (0–5), X = turn. Dashed = undefended; solid = defended. **Lower normalized AUC = better defense.**
 
 ## Hypotheses Tested
 
@@ -256,7 +139,7 @@ The output figure `auc_results.png` shows:
 | H3: DROP TABLE never reaches SQLite | `test_gateway.py::TestBlockedSQL` |
 | H4: Benign AUC ≈ 0 | `test_auc_metric.py::test_benign_auc_near_zero` |
 | H5: Hot-update improves detection | `test_layers.py::TestLayer2::test_add_threat_hot_update` |
-| H6: Generalization holdout ~80% recall (not 100%) | `test_benchmark.py::test_generalization_combined_recall_band` |
+| H6: Frozen holdout regression snapshot | `tests/test_benchmark_locked.py` |
 
 ## OWASP Coverage
 
@@ -271,30 +154,21 @@ The output figure `auc_results.png` shows:
 
 ```
 rage_core/
-  models.py              # dataclasses
-  layers/
-    layer1_rules.py      # regex pre-filter
-    layer2_rag.py        # RAG threat KB
-    layer3_semantic.py   # dynamic semantic filter (CORE)
-    layer4_decision.py   # decision engine + pipeline
-    gateway.py           # action gateway
-  kb/threats.json        # threat corpus
-  metrics/
-    auc_degradation.py   # AUC metric
-    evaluator.py         # ground-truth evaluator
-  demo/
-    agent.py             # SQLite mock agent
-    attacks.py           # multi-turn attack scenarios
-    cli.py               # rage-demo entry point
-Training-Center/         # Crescendo red-teaming automation (ASR, KB insights)
-  run_campaign.py        # uv run rage-training
-  apply_insights.py      # apply results → threats.json
-tests/                   # pytest suite
-Documentation/           # reference documents
+  layers/                # L1–L4 + SQL gateway
+  gate/ + judge/         # Track A: ChatGate + SessionJudge
+  profiles/ + chat/      # company profiles + ProfileChatbot
+  benchmark/             # rage-bench, rage-bench-product
+  kb/                    # threats + eval holdouts
+  metrics/ + demo/       # AUC-D, rage-demo, SQLite agent
+scripts/                 # run-*.sh — see scripts/README.md
+tests/                   # 233 pytest tests
+Documentation/           # evaluation, product docs, submission PDF
+QUICKSTART.md            # command cheat sheet
+ROADMAP.md               # main vs experimental branches
 ```
 
 ## Security Notes
 
-- The threat KB and intent summaries are treated as **untrusted content** (OWASP LLM08). They are sanitized before storage and never concatenated into privileged system prompts.
-- The AUC metric is non-circular: scores come from observable ground truth, not from the defense's internal predictions.
-- The canary `ZEPHYR-7781` is a safe synthetic token — no harmful content is generated.
+- Threat KB and intent summaries are **untrusted** (OWASP LLM08); sanitized before storage.
+- AUC is non-circular: scores from observable ground truth, not defense predictions.
+- Canary `ZEPHYR-7781` is a safe synthetic token.

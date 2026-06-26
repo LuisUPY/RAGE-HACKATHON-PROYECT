@@ -1,27 +1,50 @@
-# Envío Global South AI Safety Hackathon
+# Envío Global South AI Safety Hackathon — RAGE
 
 Plantilla oficial: https://github.com/aisafetymexico/global-south-ais-template
 
-## Archivo principal
+## Equipo
 
-Edita **`draft_submission.md`** en la raíz del repo (estructura exacta del template).
+| Autor |
+|-------|
+| Luis Gerardo Escalante Velázquez |
+| Armando Alberto Rivas Quevedo |
+| Juan Emiliano Quintal Chuc |
+| Alette Guadalupe Martínez Juárez |
 
-## Generar PDF (máx. 8 páginas)
+**Track:** AI Security · Prompt injection & jailbreaks
+
+## Archivos de entrega
+
+| Archivo | Descripción |
+|---------|-------------|
+| `draft_submission.md` | **Editar solo este archivo** (inglés, figuras embebidas) |
+| `submission/GlobalSouth_RAGE_Submission.md` | Copia auto-generada al correr `generate_submission_pdf.sh` |
+| `Documentation/figures/rage_pipeline.png` | Figura 1 — pipeline end-to-end |
+| `Documentation/figures/rage_layers.png` | Figura 2 — capas L1–L4 |
+| `Documentation/GlobalSouth-RAGE-Submission.pdf` | PDF final (máx. 8 páginas) |
+
+Regenerar figuras + PDF:
 
 ```bash
 ./scripts/generate_submission_pdf.sh
-# → Documentation/GlobalSouth-RAGE-Submission.pdf
 ```
-
-Falla automáticamente si supera 8 páginas.
 
 ## Checklist de envío
 
-- [ ] Autores y afiliaciones en `draft_submission.md`
-- [ ] Track: AI Security · Sub-track: Prompt injection & jailbreaks
-- [ ] Abstract 150–250 palabras
-- [ ] Sección Limitaciones + doble uso (§5)
-- [ ] LLM Usage Statement
-- [ ] Link al repo en Code and Data
-- [ ] PDF ≤ 8 páginas
+- [x] Autores y afiliación en `draft_submission.md`
+- [x] Track: AI Security · Sub-track: Prompt injection & jailbreaks
+- [x] Abstract 150–250 palabras
+- [x] Sección Limitaciones + doble uso (§5)
+- [x] LLM Usage Statement
+- [x] Link al repo en Code and Data
+- [x] PDF ≤ 8 páginas
 - [ ] Subir vía botón "Enviar tu proyecto" (Apart)
+
+## Repo y reproducibilidad
+
+```bash
+git clone https://github.com/LuisUPY/RAGE-HACKATHON-PROYECT.git
+cd RAGE-HACKATHON-PROYECT
+uv sync
+./scripts/validate-all.sh
+```

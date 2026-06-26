@@ -1,6 +1,6 @@
 # RAGE v2 — Plan detallado de reestructuración
 
-**Estado:** decisión de diseño (no implementado)  
+**Estado:** Fase 0–2 en progreso (`rage_core/v2/`, `fp_suite`, `--v2` demo)  
 **Base de código:** `rage_core` (v1) + PRs pendientes de merge (`honest-benchmarks`, `session-api-keys`, `project-shape`)  
 **Objetivo:** defensa multi-turno **precavida pero usable** — cero falsos positivos en benigno (CI), detección fuerte en ataques confirmados, chat no interrumpido salvo alta confianza.
 

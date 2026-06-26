@@ -26,6 +26,13 @@ def _print_gate(gate) -> None:
 
 
 def main() -> int:
+    import warnings
+
+    warnings.warn(
+        "rage-chat-profile is deprecated; use: uv run rage-product-demo",
+        DeprecationWarning,
+        stacklevel=1,
+    )
     parser = argparse.ArgumentParser(
         description="RAGE company chatbot — perfil adaptable + juez contextual multi-turno",
     )
