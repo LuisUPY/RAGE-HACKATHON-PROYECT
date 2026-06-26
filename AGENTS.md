@@ -17,4 +17,5 @@ RAGE is a Python 3.12 **command-line / research tool** (no web UI, no server). I
 
 ### Notes
 - LLM-judge features and the interactive support chat require an NVIDIA/OpenAI key (`RAGE_NVIDIA_API_KEY` / `OPENAI_API_KEY`, see `.env.template`). Everything testable end-to-end works fully **offline** without keys via the `--offline` flag.
+- Planned v2 architecture (layers L0–L4, UserGate, fp_suite): see `Documentation/RAGE_V2_PLAN.md`.
 - `scripts/run-*.sh` wrappers call `uv sync --quiet` first, so they are safe to run directly.
