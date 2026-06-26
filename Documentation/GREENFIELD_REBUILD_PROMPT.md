@@ -1,6 +1,6 @@
 # Prompt greenfield — Demo multi-turno con capas de defensa
 
-**Uso:** Copia este documento (o la sección «PROMPT PARA EL AGENTE») como brief único para reconstruir el proyecto desde cero. **No continúes parcheando el repo RAGE actual**; trátalo solo como antipatrones y escenarios de inspiración.
+**Uso:** Para repo nuevo, usa **[MTGUARD_NEW_REPO_PROMPT.md](MTGUARD_NEW_REPO_PROMPT.md)** — prompt autocontenido listo para copiar. Este archivo conserva contexto, diagramas y análisis crítico.
 
 ---
 
