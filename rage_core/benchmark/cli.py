@@ -909,8 +909,8 @@ def main() -> int:
     parser.add_argument(
         "--engine",
         choices=("v1", "v2"),
-        default="v1",
-        help="Motor de defensa: v1 (legacy L1–L4) o v2 (UserGate pipeline)",
+        default="v2",
+        help="Motor de defensa: v2 (default) o v1 (legacy L1–L4)",
     )
     parser.add_argument(
         "--filter",

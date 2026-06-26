@@ -1,6 +1,6 @@
 # RAGE v2 — Plan detallado de reestructuración
 
-**Estado:** Fase 3 completada (benchmark v2 + `baseline_locked_v2.json`); Fase 4–5 pendiente  
+**Estado:** Fase 4–5 completada — v2 es el camino de producto/demo; gate/judge v1 eliminados  
 **Base de código:** `rage_core` (v1) + PRs pendientes de merge (`honest-benchmarks`, `session-api-keys`, `project-shape`)  
 **Objetivo:** defensa multi-turno **precavida pero usable** — cero falsos positivos en benigno (CI), detección fuerte en ataques confirmados, chat no interrumpido salvo alta confianza.
 

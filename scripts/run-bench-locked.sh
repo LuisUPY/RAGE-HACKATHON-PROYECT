@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
 # Official frozen security holdout — RAGE v1 (default) or v2 (--v2).
 #
-#   ./scripts/run-bench-locked.sh           # v1 L1+L2
-#   ./scripts/run-bench-locked.sh --v2        # v2 pipeline
+#   ./scripts/run-bench-locked.sh           # v2 (default)
+#   ./scripts/run-bench-locked.sh --v1        # legacy v1 L1+L2
 #
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 uv sync --quiet
 
-ENGINE=v1
+ENGINE=v2
 FULL=false
 BENCH_ARGS=()
 for arg in "$@"; do
   if [[ "$arg" == "--full" ]]; then
     FULL=true
-  elif [[ "$arg" == "--v2" ]]; then
-    ENGINE=v2
+  elif [[ "$arg" == "--v1" ]]; then
+    ENGINE=v1
   else
     BENCH_ARGS+=("$arg")
   fi
